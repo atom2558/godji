@@ -11,15 +11,17 @@ class GeminiAssistantClient:
 
     def __init__(self, api_key: str = None):
         self.ollama_url = "http://localhost:11434/api/generate"
-        self.ollama_model = "qwen2.5:0.5b" # Fast local model installed on user's PC
+        # Use user's installed qwen2.5:7b for intelligent Thai answers and math calculation
+        self.ollama_model = "qwen2.5:7b"
 
     def _query_ollama(self, prompt: str) -> str:
-        """Query 100% local Ollama LLM."""
+        """Query 100% local Ollama LLM with qwen2.5:7b."""
         try:
             payload = json.dumps({
                 "model": self.ollama_model,
                 "prompt": (
                     "คุณคือ AI Godji ผู้ช่วยคอมพิวเตอร์ประจำตัว จงตอบผู้ใช้อย่างสุภาพน่ารักในฐานะ AI Godji\n"
+                    "คำนวณคณิตศาสตร์ให้ถูกต้องหากผู้ใช้ถามเรื่องตัวเลข\n"
                     "หากผู้ใช้สั่งงานระบบ (เช่น สร้างโฟลเดอร์, สร้างไฟล์, ลบไฟล์, หรือรันคำสั่ง terminal) "
                     "ให้ตอบด้วยรูปแบบ JSON ดังนี้เท่านั้น:\n"
                     "```json\n"
@@ -38,7 +40,7 @@ class GeminiAssistantClient:
                 data=payload,
                 headers={'Content-Type': 'application/json'}
             )
-            with urllib.request.urlopen(req, timeout=10) as resp:
+            with urllib.request.urlopen(req, timeout=12) as resp:
                 if resp.status == 200:
                     data = json.loads(resp.read().decode('utf-8'))
                     res_text = data.get("response", "").strip()
@@ -46,8 +48,22 @@ class GeminiAssistantClient:
                         return res_text
         except Exception as e:
             print(f"[Ollama Error] Query failed: {e}")
+            # Fallback to qwen2.5:0.5b if 7b is loading
+            try:
+                payload = json.dumps({
+                    "model": "qwen2.5:0.5b",
+                    "prompt": f"คุณคือ AI Godji ตอบผู้ใช้ว่า: {prompt}",
+                    "stream": False
+                }).encode('utf-8')
+                req = urllib.request.Request(self.ollama_url, data=payload, headers={'Content-Type': 'application/json'})
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    if resp.status == 200:
+                        data = json.loads(resp.read().decode('utf-8'))
+                        return data.get("response", "").strip()
+            except Exception:
+                pass
 
-        return "สวัสดีครับ! ผม AI Godji ผู้ช่วยคอมพิวเตอร์ ยินดีรับคำสั่งครับ! (รันผ่าน 100% Local Ollama)"
+        return "สวัสดีครับ! ผม AI Godji พร้อมช่วยเหลือและคำนวณตัวเลขให้ครับ!"
 
     async def analyze_screen_frame(self, image_bytes: bytes, user_prompt: str = None) -> dict:
         """ADA V2 Local Vision Architecture (0 API Calls, 0% Quota Used)."""
@@ -71,7 +87,7 @@ class GeminiAssistantClient:
             return {"status": "error", "message": f"Unknown tool '{tool_name}'"}
 
     async def chat_with_godji(self, user_message: str, image_bytes: bytes = None) -> dict:
-        """Process user text/voice prompt using 100% Local Ollama."""
+        """Process user text/voice prompt using 100% Local Ollama qwen2.5:7b."""
         raw_text = self._query_ollama(user_message)
         reply_text = raw_text
         cli_cmd = None
