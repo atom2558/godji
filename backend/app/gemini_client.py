@@ -219,9 +219,13 @@ class GeminiAssistantClient:
             print(f"Error in chat_with_godji: {e}")
             err_msg = str(e)
             if "429" in err_msg or "quota" in err_msg.lower():
-                err_msg = "⚠️ โควต้าฟรีของ Gemini API เต็มชั่วคราว (จำกัด 15 ครั้ง/นาที) กรุณารอประมาณ 30 วินาที แล้วลองใหม่ครับ!"
+                print("⚠️ Gemini 429 encountered in chat_with_godji -> Routing to local Ollama")
+                return {
+                    "reply": self._query_ollama_local([user_message]),
+                    "cli_output": None
+                }
             return {
-                "reply": err_msg,
+                "reply": f"⚠️ เกิดข้อผิดพลาดในการสนทนา: {err_msg}",
                 "cli_output": None
             }
 
@@ -295,9 +299,13 @@ class GeminiAssistantClient:
             print(f"Error in process_voice_chat: {e}")
             err_msg = str(e)
             if "429" in err_msg or "quota" in err_msg.lower():
-                err_msg = "⚠️ โควต้าฟรีของ Gemini API เต็มชั่วคราว (จำกัด 15 ครั้ง/นาที) กรุณารอประมาณ 30 วินาที แล้วลองใหม่ครับ!"
+                print("⚠️ Gemini 429 encountered in process_voice_chat -> Routing to local Ollama")
+                return {
+                    "reply": self._query_ollama_local(["โปรดตอบกลับผู้ใช้อย่างสุภาพน่ารักในฐานะ AI Godji ครับ"]),
+                    "cli_output": None
+                }
             return {
-                "reply": err_msg,
+                "reply": f"⚠️ เกิดข้อผิดพลาดในการฟังเสียง: {err_msg}",
                 "cli_output": None
             }
 

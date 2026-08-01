@@ -4,8 +4,14 @@ import os
 import speech_recognition as sr
 from pydub import AudioSegment
 
+try:
+    import imageio_ffmpeg
+    AudioSegment.converter = imageio_ffmpeg.get_ffmpeg_exe()
+except Exception as e:
+    print(f"⚠️ Could not set imageio_ffmpeg path: {e}")
+
 class STTTranscriber:
-    """Converts audio bytes (webm/wav) to Thai text using SpeechRecognition."""
+    """Converts audio bytes (webm/wav) to Thai text using SpeechRecognition and local FFmpeg."""
 
     @classmethod
     def transcribe_audio_bytes(cls, audio_bytes: bytes, mime_type: str = "audio/webm") -> str:
@@ -32,11 +38,11 @@ class STTTranscriber:
                 audio_data = recognizer.record(source)
 
             text = recognizer.recognize_google(audio_data, language="th-TH")
-            print(f"🎙️ [STT] Transcribed Audio -> Thai Text: '{text}'")
+            print(f"🎙️ [STT Success] Transcribed Thai Text: '{text}'")
             return text
 
         except sr.UnknownValueError:
-            print("🎙️ [STT] Speech Recognition could not understand audio")
+            print("🎙️ [STT] Speech Recognition: Audio not clear or quiet")
             return ""
         except Exception as e:
             print(f"⚠️ [STT] Error transcribing audio: {e}")
