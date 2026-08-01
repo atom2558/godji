@@ -164,3 +164,78 @@ class GeminiAssistantClient:
                 "cli_output": None
             }
 
+    async def process_voice_chat(self, audio_bytes: bytes, mime_type: str = "audio/webm", image_bytes: bytes = None) -> dict:
+        """Process direct audio recording from microphone using Gemini Multimodal capability."""
+        if not self.model:
+            return {
+                "reply": "⚠️ กรุณาตั้งค่า GEMINI_API_KEY ก่อนเริ่มสนทนาครับ!",
+                "cli_output": None
+            }
+
+        try:
+            prompt_content = []
+            sys_msg = (
+                "ฟังเสียงที่ผู้ใช้พูดในไฟล์เสียงนี้ และทำตามคำสั่ง:\n"
+                "หากผู้ใช้สั่งให้ควบคุมระบบ (เช่น สร้างโฟลเดอร์, สร้างไฟล์, ลบไฟล์, หรือรันคำสั่ง Windows/Linux) "
+                "ให้ตอบกลับด้วยรูปแบบ JSON ดังนี้เท่านั้น:\n"
+                "```json\n"
+                "{\n"
+                '  "reply": "คำตอบภาษาไทยที่จะพูดตอบผู้ใช้อย่างสุภาพน่ารัก",\n'
+                '  "cli_command": "คำสั่ง terminal ที่จะสั่งรัน (ถ้าไม่มีสั่งงานให้เป็น null)"\n'
+                "}\n"
+                "```\n"
+                "หากเป็นแค่การคุยทั่วไปหรือถามคำถาม ให้ใส่ cli_command เป็น null"
+            )
+            prompt_content.append(sys_msg)
+            
+            # Attach audio inline
+            prompt_content.append({
+                "mime_type": mime_type,
+                "data": audio_bytes
+            })
+
+            if image_bytes:
+                image = Image.open(io.BytesIO(image_bytes))
+                prompt_content.append(image)
+
+            response = self.model.generate_content(prompt_content)
+            raw_text = response.text or ""
+
+            reply_text = raw_text
+            cli_cmd = None
+
+            if "```json" in raw_text:
+                json_str = raw_text.split("```json")[1].split("```")[0].strip()
+                try:
+                    parsed = json.loads(json_str)
+                    reply_text = parsed.get("reply", raw_text)
+                    cli_cmd = parsed.get("cli_command", None)
+                except Exception:
+                    pass
+            elif raw_text.strip().startswith("{") and raw_text.strip().endswith("}"):
+                try:
+                    parsed = json.loads(raw_text.strip())
+                    reply_text = parsed.get("reply", raw_text)
+                    cli_cmd = parsed.get("cli_command", None)
+                except Exception:
+                    pass
+
+            cli_output = None
+            if cli_cmd:
+                print(f"🤖 AI Godji executing command from voice chat: {cli_cmd}")
+                cli_output = CLISystemAgent.execute_command(cli_cmd)
+
+            return {
+                "reply": reply_text,
+                "cli_command": cli_cmd,
+                "cli_output": cli_output
+            }
+
+        except Exception as e:
+            print(f"Error in process_voice_chat: {e}")
+            return {
+                "reply": f"⚠️ เกิดข้อผิดพลาดในการฟังเสียง: {str(e)}",
+                "cli_output": None
+            }
+
+

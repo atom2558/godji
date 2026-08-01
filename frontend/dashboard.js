@@ -170,62 +170,72 @@ const micBtn = document.getElementById('micBtn');
 const ttsToggleBtn = document.getElementById('ttsToggleBtn');
 
 let isTTSEnabled = true;
-let isListening = false;
-let recognition = null;
-
-if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  recognition = new SpeechRecognition();
-  recognition.lang = 'th-TH';
-  recognition.continuous = false;
-  recognition.interimResults = false;
-
-  recognition.onstart = () => {
-    isListening = true;
-    micBtn.style.background = '#ef4444';
-    micBtn.innerText = '🛑';
-    log('🎙️ กำลังฟังเสียงของคุณเป็นภาษาไทย...', 'info');
-  };
-
-  recognition.onresult = (event) => {
-    const transcript = event.results[0][0].transcript;
-    chatInput.value = transcript;
-    log(`🎙️ คุณพูดว่า: "${transcript}"`, 'info');
-    sendChatMessage(transcript);
-  };
-
-  recognition.onerror = (event) => {
-    log(`⚠️ ข้อผิดพลาดจากไมโครโฟน: ${event.error}`, 'warning');
-    stopListening();
-  };
-
-  recognition.onend = () => {
-    stopListening();
-  };
-}
-
-function stopListening() {
-  isListening = false;
-  micBtn.style.background = '#ec4899';
-  micBtn.innerText = '🎙️';
-}
+let isRecording = false;
+let mediaRecorder = null;
+let audioChunks = [];
 
 if (micBtn) {
-  micBtn.addEventListener('click', () => {
-    if (!recognition) {
-      log('⚠️ เบราว์เซอร์/ระบบไม่รองรับการจำเสียง (Speech Recognition)', 'warning');
-      return;
-    }
-    if (isListening) {
-      recognition.stop();
+  micBtn.addEventListener('click', async () => {
+    if (isRecording) {
+      stopRecording();
     } else {
-      try {
-        recognition.start();
-      } catch (e) {
-        log(`⚠️ ไม่สามารถเปิดไมโครโฟนได้: ${e.message}`, 'warning');
-      }
+      await startRecording();
     }
   });
+}
+
+async function startRecording() {
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    log('โปรดเชื่อมต่อ Backend WebSocket ก่อนใช้ไมโครโฟน!', 'warning');
+    return;
+  }
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream);
+    audioChunks = [];
+
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) audioChunks.push(event.data);
+    };
+
+    mediaRecorder.onstop = async () => {
+      const mimeType = mediaRecorder.mimeType || 'audio/webm';
+      const audioBlob = new Blob(audioChunks, { type: mimeType });
+      const reader = new FileReader();
+      reader.readAsDataURL(audioBlob);
+      reader.onloadend = async () => {
+        const base64Audio = reader.result.split(',')[1];
+        const base64Frame = await window.godjiAPI.captureScreen();
+        
+        log('🎙️ ส่งเสียงอัดของคุณไปให้ Gemini 2.5 Flash ประมวลผล...', 'info');
+        ws.send(JSON.stringify({
+          type: 'voice_chat',
+          audio: base64Audio,
+          mime_type: mimeType,
+          image: base64Frame
+        }));
+      };
+      stream.getTracks().forEach(track => track.stop());
+    };
+
+    mediaRecorder.start();
+    isRecording = true;
+    micBtn.style.background = '#ef4444';
+    micBtn.innerText = '🛑';
+    log('🎙️ กำลังอัดเสียง... พูดเสร็จแล้วกดปุ่ม 🛑 อีกครั้งเพื่อส่งหา Godji ครับ', 'info');
+  } catch (err) {
+    log(`⚠️ ไม่สามารถเปิดไมโครโฟนได้: ${err.message}`, 'error');
+  }
+}
+
+function stopRecording() {
+  if (mediaRecorder && isRecording) {
+    mediaRecorder.stop();
+    isRecording = false;
+    micBtn.style.background = '#ec4899';
+    micBtn.innerText = '🎙️';
+  }
 }
 
 if (ttsToggleBtn) {

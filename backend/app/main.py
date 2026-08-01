@@ -101,6 +101,22 @@ async def websocket_live_stream(websocket: WebSocket):
                     "cli_command": chat_res.get("cli_command"),
                     "cli_output": chat_res.get("cli_output")
                 })
+            elif packet_type == "voice_chat":
+                audio_b64 = packet.get("audio", "")
+                mime_type = packet.get("mime_type", "audio/webm")
+                image_b64 = packet.get("image", None)
+                
+                audio_bytes = base64.b64decode(audio_b64)
+                image_bytes = base64.b64decode(image_b64) if image_b64 else None
+                
+                voice_res = await gemini_client.process_voice_chat(audio_bytes, mime_type, image_bytes)
+                await websocket.send_json({
+                    "type": "chat_reply",
+                    "reply": voice_res.get("reply"),
+                    "cli_command": voice_res.get("cli_command"),
+                    "cli_output": voice_res.get("cli_output")
+                })
+
 
 
     except WebSocketDisconnect:
