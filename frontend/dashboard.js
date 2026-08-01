@@ -47,7 +47,7 @@ connectBtn.addEventListener('click', () => {
       connectBtn.innerText = 'Disconnect';
     };
 
-    ws.onmessage = (event) => {
+    ws.onmessage = async (event) => {
       try {
         const msg = JSON.parse(event.data);
         if (msg.type === 'hud_update') {
