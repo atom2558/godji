@@ -72,12 +72,8 @@ class GeminiAssistantClient:
 
         except Exception as e:
             print(f"Error calling Gemini API: {e}")
-            return {
-                "subtitles": f"⚠️ เกิดข้อผิดพลาดในการวิเคราะห์ภาพ: {str(e)}",
-                "bounding_boxes": [],
-                "lead_dots": [],
-                "arrows": []
-            }
+            # Fallback to ADA V2 Local OpenCV Vision (0 API Calls, 0% Quota Used)
+            return VisionParser.extract_local_opencv_hud(image_bytes)
 
     def _generate_content_with_fallback(self, contents: list):
         """Helper to generate content, automatically trying alternative models if 429 Quota is hit."""
