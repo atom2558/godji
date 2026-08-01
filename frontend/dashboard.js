@@ -434,4 +434,28 @@ if (chatInput) {
   });
 }
 
+// Auto-Connect and Auto-Start Settings on Launch (1-Click One-Stop Automation)
+window.addEventListener('DOMContentLoaded', () => {
+  setTimeout(() => {
+    // 1. Auto-connect WebSocket to local server
+    if (connectBtn && (!ws || ws.readyState !== WebSocket.OPEN)) {
+      connectBtn.click();
+    }
+    
+    // 2. Auto-start Real-time Vision stream
+    setTimeout(() => {
+      if (toggleVisionBtn && !isStreaming && ws && ws.readyState === WebSocket.OPEN) {
+        startStreaming();
+      }
+    }, 1200);
+
+    // 3. Auto-enable Handsfree Continuous Voice Mode (ADA V2 Style)
+    setTimeout(async () => {
+      if (continuousVoiceBtn && !isContinuousVoice && ws && ws.readyState === WebSocket.OPEN) {
+        continuousVoiceBtn.click();
+      }
+    }, 2200);
+  }, 600);
+});
+
 
