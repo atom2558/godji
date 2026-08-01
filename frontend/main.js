@@ -7,27 +7,29 @@ let overlayWindow = null;
 let pyBackendProcess = null;
 
 function autoStartPythonBackend() {
-  // Clear any existing process on port 8000 then start Python Backend
+  // Clear any existing process on port 8000 using PowerShell then start Python Backend
   const killCmd = process.platform === 'win32'
-    ? 'for /f "tokens=5" %a in (\'netstat -aon ^| findstr :8000\') do taskkill /f /pid %a 2>nul'
+    ? 'powershell -Command "Get-NetTCPConnection -LocalPort 8000 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }"'
     : 'fuser -k 8000/tcp';
 
   exec(killCmd, () => {
-    const backendDir = path.join(__dirname, '..', 'backend');
-    console.log('[Electron] Launching Python Backend from:', backendDir);
-    
-    pyBackendProcess = spawn('python', ['-m', 'uvicorn', 'app.main:app', '--host', '0.0.0.0', '--port', '8000'], {
-      cwd: backendDir,
-      shell: true
-    });
+    setTimeout(() => {
+      const backendDir = path.join(__dirname, '..', 'backend');
+      console.log('[Electron] Launching Fresh Python Backend from:', backendDir);
+      
+      pyBackendProcess = spawn('python', ['-m', 'uvicorn', 'app.main:app', '--host', '0.0.0.0', '--port', '8000'], {
+        cwd: backendDir,
+        shell: true
+      });
 
-    pyBackendProcess.stdout.on('data', (data) => {
-      console.log(`[Python Backend] ${data}`);
-    });
+      pyBackendProcess.stdout.on('data', (data) => {
+        console.log(`[Python Backend] ${data}`);
+      });
 
-    pyBackendProcess.stderr.on('data', (data) => {
-      console.error(`[Python Backend Err] ${data}`);
-    });
+      pyBackendProcess.stderr.on('data', (data) => {
+        console.error(`[Python Backend Err] ${data}`);
+      });
+    }, 500);
   });
 }
 
