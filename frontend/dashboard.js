@@ -338,25 +338,67 @@ function stopRecording() {
   };
 }
 
-if (ttsToggleBtn) {
-  ttsToggleBtn.addEventListener('click', () => {
-    isTTSEnabled = !isTTSEnabled;
-    ttsToggleBtn.style.background = isTTSEnabled ? '#10b981' : '#64748b';
-    log(`🔊 เสียงตอบกลับ: ${isTTSEnabled ? 'เปิด' : 'ปิด'}`, 'info');
+let isContinuousVoice = false;
+const continuousVoiceBtn = document.getElementById('continuousVoiceBtn');
+
+if (continuousVoiceBtn) {
+  continuousVoiceBtn.addEventListener('click', async () => {
+    isContinuousVoice = !isContinuousVoice;
+    if (isContinuousVoice) {
+      continuousVoiceBtn.style.background = '#10b981';
+      continuousVoiceBtn.innerText = '🔄 โหมดคุยต่อเนื่อง (Handsfree ADA V2): เปิดอยู่';
+      log('🔄 เปิดโหมดคุยต่อเนื่อง (Handsfree ADA V2) - เมื่อ AI พูดจบ ระบบจะเริ่มฟังให้อัตโนมัติครับ', 'success');
+      await startRecording();
+    } else {
+      continuousVoiceBtn.style.background = '#3b82f6';
+      continuousVoiceBtn.innerText = '🔄 โหมดคุยต่อเนื่อง (Handsfree ADA V2): ปิด';
+      log('🔄 ปิดโหมดคุยต่อเนื่องเรียบร้อยแล้ว', 'info');
+      stopRecording();
+    }
   });
 }
 
 function speakText(text) {
-  if (!isTTSEnabled || !('speechSynthesis' in window) || !text) return;
+  if (!text) {
+    if (isContinuousVoice) {
+      setTimeout(async () => {
+        if (isContinuousVoice && !isRecording) await startRecording();
+      }, 500);
+    }
+    return;
+  }
   
   // Clean raw JSON or markdown symbols if present
-  let cleanText = text.replace(/```[\s\S]*?```/g, '').replace(/[\{\}\[\]\*\_\#]/g, '').strip?.() || text;
-  if (!cleanText.trim()) return;
+  let cleanText = text.replace(/```[\s\S]*?```/g, '').replace(/[\{\}\[\]\*\_\#]/g, '').trim() || text;
+
+  if (!isTTSEnabled || !('speechSynthesis' in window) || !cleanText) {
+    if (isContinuousVoice) {
+      setTimeout(async () => {
+        if (isContinuousVoice && !isRecording) await startRecording();
+      }, 1000);
+    }
+    return;
+  }
 
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(cleanText);
   utterance.lang = 'th-TH';
   utterance.rate = 1.0;
+
+  const onSpeechDone = () => {
+    if (isContinuousVoice) {
+      setTimeout(async () => {
+        if (isContinuousVoice && !isRecording) {
+          log('🎙️ AI พูดจบแล้ว... เริ่มฟังเสียงต่อเนื่องอัตโนมัติ', 'info');
+          await startRecording();
+        }
+      }, 400);
+    }
+  };
+
+  utterance.onend = onSpeechDone;
+  utterance.onerror = onSpeechDone;
+
   window.speechSynthesis.speak(utterance);
 }
 
