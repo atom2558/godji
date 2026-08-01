@@ -38,12 +38,22 @@ prev_frame_bytes = None
 is_streaming_active = False
 
 STRICT_WAKE_WORDS = ["ก็อดจิ", "กอดจิ", "ก็อตจิ", "ก๊อดจิ", "godji", "ก็อด"]
+VISION_NEED_KEYWORDS = [
+    "หน้าจอ", "บทความ", "ภาพ", "ตรงนี้", "ช่วยดู", "มองดู", "ดูให้", 
+    "อ่านให้", "หน้าจอนี้", "รูปนี้", "ปุ่ม", "แอป", "screen", "look", "บทความนี้"
+]
 
 def check_wake_word(text: str):
     if not text or not text.strip():
         return False
     lower = text.lower()
     return any(w in lower for w in STRICT_WAKE_WORDS)
+
+def needs_screen_vision(text: str):
+    if not text:
+        return False
+    lower = text.lower()
+    return any(kw in lower for kw in VISION_NEED_KEYWORDS)
 
 @app.get("/")
 def read_root():
@@ -128,6 +138,14 @@ async def websocket_endpoint(websocket: WebSocket):
                             reply_msg = "ครับผม! มีอะไรให้ก็อดจิช่วยดูแลบอกได้เลยครับ"
                             cli_cmd = None
                             cli_output = None
+                        elif needs_screen_vision(transcribed_text) and not image_bytes:
+                            # AI detects that screen context is required but no image was attached: Request screenshot from client!
+                            print(f"📸 [Vision Request] Prompt requires screen context: '{transcribed_text}' -> Requesting screenshot from client")
+                            await websocket.send_json({
+                                "type": "request_screen_snapshot",
+                                "prompt": transcribed_text
+                            })
+                            continue
                         else:
                             voice_res = await gemini_client.chat_with_godji(transcribed_text, image_bytes)
                             reply_msg = voice_res.get("reply")

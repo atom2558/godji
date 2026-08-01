@@ -70,6 +70,18 @@ connectBtn.addEventListener('click', () => {
           if (msg.cli_output) {
             log(`💻 CLI Output: ${JSON.stringify(msg.cli_output)}`, 'info');
           }
+        } else if (msg.type === 'request_screen_snapshot') {
+          log('📸 AI Godji ร้องขอภาพหน้าจอเพิ่มเติมเพื่อวิเคราะห์... ถ่ายภาพ 1 ช็อตส่งทันที', 'info');
+          try {
+            const base64Frame = await window.godjiAPI.captureScreen();
+            ws.send(JSON.stringify({
+              type: 'chat',
+              message: msg.prompt || "ช่วยวิเคราะห์ภาพหน้าจอนี้แล้วตอบคำถามให้ด้วยครับ",
+              image: base64Frame
+            }));
+          } catch (err) {
+            console.warn("Screen capture request failed:", err);
+          }
         } else if (msg.type === 'skip') {
           // Heartbeat skipped
         }
@@ -342,15 +354,10 @@ function stopRecording() {
   reader.onloadend = async () => {
     const base64Audio = reader.result.split(',')[1];
     
-    // Capture 1-shot screen snapshot on every voice query so Moondream Vision can analyze screen/articles
-    let base64Frame = null;
-    try {
-      base64Frame = await window.godjiAPI.captureScreen();
-    } catch (err) {
-      console.warn("Screen capture failed:", err);
-    }
+    // ONLY capture screen screenshot if Real-time Vision Stream is ACTIVE (isStreaming === true)
+    let base64Frame = isStreaming ? await window.godjiAPI.captureScreen() : null;
     
-    log('🎙️ ส่งไฟล์เสียง WAV และภาพหน้าจอ 1 ช็อตไปให้ AI Godji ถอดความ...', 'info');
+    log('🎙️ ส่งไฟล์เสียง WAV ไปให้ AI Godji ถอดความ...', 'info');
     ws.send(JSON.stringify({
       type: 'voice_chat',
       audio: base64Audio,
