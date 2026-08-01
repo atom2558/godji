@@ -286,7 +286,7 @@ async function startRecording() {
     let hasSpoken = false;
     let consecutiveVoiceFrames = 0;
     const VOICE_THRESHOLD = 15.0; // Energy threshold above PC fan static
-    const SILENCE_TIMEOUT = 1200; // 1.2s silence after speech
+    const SILENCE_TIMEOUT = 2500; // 2.5s silence after speech before sending
 
     function checkSilence() {
       if (!isRecording) return;

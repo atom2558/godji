@@ -8,8 +8,9 @@ import speech_recognition as sr
 whisper_model = None
 try:
     from faster_whisper import WhisperModel
-    whisper_model = WhisperModel("small", device="cpu", compute_type="int8")
-    print("[STT] Local Faster-Whisper 'small' high-accuracy model loaded!")
+    # Use 'base' model for extremely fast response times on CPU
+    whisper_model = WhisperModel("base", device="cpu", compute_type="int8")
+    print("[STT] Local Faster-Whisper 'base' ultra-fast model loaded!")
 except Exception as e:
     print(f"[STT Error] Faster-Whisper init: {e}")
 
@@ -48,21 +49,7 @@ class STTTranscriber:
                 tmp_file.write(audio_bytes)
                 tmp_wav_path = tmp_file.name
 
-            # Method 1: Google SpeechRecognition th-TH (Primary)
-            try:
-                recognizer = sr.Recognizer()
-                with sr.AudioFile(tmp_wav_path) as source:
-                    audio_data = recognizer.record(source)
-
-                text = recognizer.recognize_google(audio_data, language="th-TH")
-                text = cls._correct_godji_phonetics(text)
-                if text and text.strip():
-                    print(f"[Google STT] Transcribed Thai Text: '{text}'")
-                    return text
-            except Exception as ge:
-                print(f"[Google STT Fallback]: {ge}")
-
-            # Method 2: Local Faster-Whisper 'small' Model (High Accuracy Fallback)
+            # Method 1: Local Faster-Whisper 'base' Model (Ultra-Fast Primary)
             if whisper_model:
                 try:
                     segments, _ = whisper_model.transcribe(
@@ -77,6 +64,20 @@ class STTTranscriber:
                         return text
                 except Exception as we:
                     print(f"[Faster-Whisper STT Error]: {we}")
+
+            # Method 2: Google SpeechRecognition th-TH (High Accuracy Fallback)
+            try:
+                recognizer = sr.Recognizer()
+                with sr.AudioFile(tmp_wav_path) as source:
+                    audio_data = recognizer.record(source)
+
+                text = recognizer.recognize_google(audio_data, language="th-TH")
+                text = cls._correct_godji_phonetics(text)
+                if text and text.strip():
+                    print(f"[Google STT] Transcribed Thai Text: '{text}'")
+                    return text
+            except Exception as ge:
+                print(f"[Google STT Fallback]: {ge}")
 
             return ""
 
