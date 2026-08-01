@@ -498,11 +498,15 @@ if (chatInput) {
 // Auto-Connect and Auto-Start Settings on Launch (Immediate & Reconnect)
 function autoInit() {
   setTimeout(() => {
-    // 1. Auto-connect WebSocket to local server
+    // 1. Force 127.0.0.1 IPv4 address to prevent Windows IPv6 ::1 localhost resolving bug
+    if (wsUrlInput && !wsUrlInput.value.includes('127.0.0.1') && !wsUrlInput.value.includes('render.com')) {
+      wsUrlInput.value = 'ws://127.0.0.1:8000/ws/live';
+    }
+    // 2. Auto-connect WebSocket to local server
     if (connectBtn && (!ws || ws.readyState !== WebSocket.OPEN)) {
       connectBtn.click();
     }
-  }, 300);
+  }, 200);
 }
 
 if (document.readyState === 'loading') {
