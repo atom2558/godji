@@ -265,8 +265,9 @@ async function startRecording() {
     log('🎙️ เริ่มฟังเสียง... เมื่อพูดจบระบบจะส่งให้อัตโนมัติครับ', 'info');
 
     let hasSpoken = false;
-    const VOICE_THRESHOLD = 5.0; // Voice frequency energy threshold
-    const SILENCE_TIMEOUT = 750; // Fast 0.75s silence timeout after speaking
+    let consecutiveVoiceFrames = 0;
+    const VOICE_THRESHOLD = 15.0; // Energy threshold above PC fan static
+    const SILENCE_TIMEOUT = 1200; // 1.2s silence after speech
 
     function checkSilence() {
       if (!isRecording) return;
@@ -280,16 +281,22 @@ async function startRecording() {
       let voiceEnergy = voiceSum / 43.0;
 
       if (voiceEnergy > VOICE_THRESHOLD) {
-        hasSpoken = true;
-        if (silenceTimer) {
-          clearTimeout(silenceTimer);
-          silenceTimer = null;
+        consecutiveVoiceFrames++;
+        if (consecutiveVoiceFrames >= 4) { // Requires ~0.4s continuous real human speech
+          hasSpoken = true;
+          if (silenceTimer) {
+            clearTimeout(silenceTimer);
+            silenceTimer = null;
+          }
         }
-      } else if (hasSpoken && !silenceTimer) {
-        silenceTimer = setTimeout(() => {
-          log('🎙️ พูดจบและเงียบเสียงแล้ว... ส่งไฟล์เสียงไปให้ AI Godji ทันที!', 'info');
-          stopRecording();
-        }, SILENCE_TIMEOUT);
+      } else {
+        consecutiveVoiceFrames = 0;
+        if (hasSpoken && !silenceTimer) {
+          silenceTimer = setTimeout(() => {
+            log('🎙️ พูดจบและเงียบเสียงแล้ว... ส่งไฟล์เสียงไปให้ AI Godji ทันที!', 'info');
+            stopRecording();
+          }, SILENCE_TIMEOUT);
+        }
       }
 
       animFrameId = requestAnimationFrame(checkSilence);

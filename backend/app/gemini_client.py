@@ -52,8 +52,8 @@ class GeminiAssistantClient:
                 "model": self.text_model,
                 "prompt": (
                     "คุณคือ AI Godji ผู้ช่วยคอมพิวเตอร์ประจำตัวระดับสูง (ADA V2 Architecture)\n"
-                    "คุณสามารถมองเห็นหน้าจอผู้ใช้ รับฟังเสียงภาษาไทย และสั่งงานระบบ Windows ได้จริง\n"
-                    "จงตอบผู้ใช้อย่างสุภาพ ฉลาด แม่นยำ และแนะนำขั้นตอนถัดไปอย่างเป็นประโยชน์\n"
+                    "คุณต้องตอบเป็นภาษาไทยอย่างเดียวเท่านั้น 100% ห้ามใช้ภาษารัสเซียหรือภาษาอื่นโดยเด็ดขาด!\n"
+                    "ตอบอย่างสุภาพ น่ารัก ชัดเจน และแนะนำแนวทางภาษาไทยอย่างถูกต้อง\n"
                     "หากผู้ใช้สั่งงานระบบ (เช่น สร้างโฟลเดอร์, เปิดเว็บ, สร้างไฟล์, ลบไฟล์, หรือรันคำสั่ง terminal) "
                     "ให้ตอบด้วยรูปแบบ JSON ดังนี้เท่านั้น:\n"
                     "```json\n"
@@ -81,7 +81,7 @@ class GeminiAssistantClient:
         except Exception as e:
             print(f"[Qwen Text Error]: {e}")
 
-        return "สวัสดีครับ! ผม AI Godji พร้อมมองหน้าจอ วิเคราะห์ข้อมูล และช่วยเหลือระบบคอมพิวเตอร์ของคุณครับ!"
+        return "สวัสดีครับ! ผม AI Godji พร้อมช่วยเหลือและตอบภาษาไทยครับ!"
 
     async def analyze_screen_frame(self, image_bytes: bytes, user_prompt: str = None) -> dict:
         """ADA V2 Local Vision Architecture (0 API Calls, 60 FPS OpenCV HUD)."""
