@@ -109,9 +109,9 @@ function startStreaming() {
   isStreaming = true;
   toggleVisionBtn.innerText = '⏸️ Pause Vision Stream';
   toggleVisionBtn.className = 'btn btn-danger';
-  log('Started Real-time Screen Vision stream (1 frame/sec)...', 'info');
+  log('Started Real-time Screen Vision stream (1 frame per 4.5 sec - Free Tier safe)...', 'info');
 
-  // Capture screen frame every 1000ms
+  // Capture screen frame every 4500ms (13 requests/min to strictly respect Gemini Free Tier 15 RPM limit)
   captureInterval = setInterval(async () => {
     if (!isStreaming || ws.readyState !== WebSocket.OPEN) return;
 
@@ -122,7 +122,7 @@ function startStreaming() {
         image: base64Frame
       }));
     }
-  }, 1000);
+  }, 4500);
 }
 
 function stopStreaming() {

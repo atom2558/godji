@@ -158,8 +158,11 @@ class GeminiAssistantClient:
 
         except Exception as e:
             print(f"Error in chat_with_godji: {e}")
+            err_msg = str(e)
+            if "429" in err_msg or "quota" in err_msg.lower():
+                err_msg = "⚠️ โควต้าฟรีของ Gemini API เต็มชั่วคราว (จำกัด 15 ครั้ง/นาที) กรุณารอประมาณ 30 วินาที แล้วลองใหม่ครับ!"
             return {
-                "reply": f"⚠️ เกิดข้อผิดพลาดในการสนทนา: {str(e)}",
+                "reply": err_msg,
                 "cli_output": None
             }
 
@@ -231,8 +234,11 @@ class GeminiAssistantClient:
 
         except Exception as e:
             print(f"Error in process_voice_chat: {e}")
+            err_msg = str(e)
+            if "429" in err_msg or "quota" in err_msg.lower():
+                err_msg = "⚠️ โควต้าฟรีของ Gemini API เต็มชั่วคราว (จำกัด 15 ครั้ง/นาที) กรุณารอประมาณ 30 วินาที แล้วลองใหม่ครับ!"
             return {
-                "reply": f"⚠️ เกิดข้อผิดพลาดในการฟังเสียง: {str(e)}",
+                "reply": err_msg,
                 "cli_output": None
             }
 
