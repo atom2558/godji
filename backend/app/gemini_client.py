@@ -72,7 +72,8 @@ class GeminiAssistantClient:
                 data=payload,
                 headers={'Content-Type': 'application/json'}
             )
-            with urllib.request.urlopen(req, timeout=15) as resp:
+            # 120s timeout for CPU-bound Ollama inference speed (Qwen 7b takes time!)
+            with urllib.request.urlopen(req, timeout=120) as resp:
                 if resp.status == 200:
                     data = json.loads(resp.read().decode('utf-8'))
                     res_text = data.get("response", "").strip()

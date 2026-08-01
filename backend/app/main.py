@@ -129,6 +129,13 @@ async def websocket_endpoint(websocket: WebSocket):
                     
                     if has_wake_word:
                         print(f"🐉 [WAKE WORD DETECTED] Prompt: '{transcribed_text}'")
+                        
+                        # Send immediate feedback to UI so user knows Godji heard them
+                        await websocket.send_json({
+                            "type": "chat_stt_result",
+                            "transcribed_text": transcribed_text
+                        })
+                        
                         cleaned_prompt = transcribed_text
                         for w in STRICT_WAKE_WORDS:
                             cleaned_prompt = cleaned_prompt.replace(w, "").strip()
