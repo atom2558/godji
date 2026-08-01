@@ -49,7 +49,21 @@ class STTTranscriber:
                 tmp_file.write(audio_bytes)
                 tmp_wav_path = tmp_file.name
 
-            # Method 1: Local Faster-Whisper 'base' Model (Ultra-Fast Primary)
+            # Method 1: Google SpeechRecognition th-TH (Ultra-Fast Cloud Primary)
+            try:
+                recognizer = sr.Recognizer()
+                with sr.AudioFile(tmp_wav_path) as source:
+                    audio_data = recognizer.record(source)
+
+                text = recognizer.recognize_google(audio_data, language="th-TH")
+                text = cls._correct_godji_phonetics(text)
+                if text and text.strip():
+                    print(f"[Google STT] Transcribed Thai Text: '{text}'")
+                    return text
+            except Exception as ge:
+                print(f"[Google STT Fallback]: {ge}")
+
+            # Method 2: Local Faster-Whisper 'base' Model (Local Fallback)
             if whisper_model:
                 try:
                     segments, _ = whisper_model.transcribe(
@@ -64,20 +78,6 @@ class STTTranscriber:
                         return text
                 except Exception as we:
                     print(f"[Faster-Whisper STT Error]: {we}")
-
-            # Method 2: Google SpeechRecognition th-TH (High Accuracy Fallback)
-            try:
-                recognizer = sr.Recognizer()
-                with sr.AudioFile(tmp_wav_path) as source:
-                    audio_data = recognizer.record(source)
-
-                text = recognizer.recognize_google(audio_data, language="th-TH")
-                text = cls._correct_godji_phonetics(text)
-                if text and text.strip():
-                    print(f"[Google STT] Transcribed Thai Text: '{text}'")
-                    return text
-            except Exception as ge:
-                print(f"[Google STT Fallback]: {ge}")
 
             return ""
 
