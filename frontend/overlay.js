@@ -15,11 +15,25 @@ window.godjiAPI.onRenderHUD((hudData) => {
   drawHUD(hudData);
 });
 
+let hudClearTimer = null;
+
 function drawHUD(data) {
+  // Clear any existing auto-clear timer
+  if (hudClearTimer) {
+    clearTimeout(hudClearTimer);
+  }
+
   // Clear canvas
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   if (!data) return;
+
+  // Auto clear HUD after 1.5 seconds if no new frame arrives (prevents frozen boxes when moving windows)
+  hudClearTimer = setTimeout(() => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    subtitleBox.style.display = 'none';
+  }, 1500);
+
 
   const screenW = canvas.width;
   const screenH = canvas.height;
