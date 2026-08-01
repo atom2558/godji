@@ -45,7 +45,7 @@ class GeminiAssistantClient:
                     if res_text:
                         return res_text
         except Exception as e:
-            print(f"⚠️ Ollama query error: {e}")
+            print(f"[Ollama Error] Query failed: {e}")
 
         return "สวัสดีครับ! ผม AI Godji ผู้ช่วยคอมพิวเตอร์ ยินดีรับคำสั่งครับ! (รันผ่าน 100% Local Ollama)"
 
@@ -94,7 +94,7 @@ class GeminiAssistantClient:
 
         cli_output = None
         if cli_cmd:
-            print(f"🤖 AI Godji executing local CLI command: {cli_cmd}")
+            print(f"[Godji CLI] Executing command: {cli_cmd}")
             cli_output = CLISystemAgent.execute_command(cli_cmd)
 
         return {

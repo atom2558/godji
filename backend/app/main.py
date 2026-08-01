@@ -4,7 +4,10 @@ import base64
 import asyncio
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from app.config import HOST, PORT, ALLOWED_ORIGINS
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from app.gemini_client import GeminiAssistantClient
 from app.vision_parser import VisionParser
 from app.cli_tools import CLISystemAgent
@@ -13,75 +16,65 @@ from app.stt_transcriber import STTTranscriber
 
 app = FastAPI(
     title="AI Godji Backend API",
-    description="Multimodal Real-time AI Desktop Assistant Backend for Render & Electron",
+    description="Multimodal Desktop Assistant with Computer Vision and CLI Execution Capabilities",
     version="1.0.0"
 )
 
-# CORS middleware configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-gemini_client = GeminiAssistantClient()
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+gemini_client = GeminiAssistantClient(api_key=GEMINI_API_KEY)
+
+HOST = os.getenv("HOST", "0.0.0.0")
+PORT = int(os.getenv("PORT", 8000))
+
+prev_frame_bytes = None
+is_streaming_active = False
 
 @app.get("/")
-@app.get("/health")
-async def health_check():
-    """Health check endpoint for Render.com deployment monitoring."""
+def read_root():
     return {
-        "status": "online",
-        "service": "AI Godji Backend",
-        "gemini_api_configured": bool(gemini_client.client)
+        "app": "AI Godji Backend Server",
+        "status": "Online",
+        "gemini_api_key_configured": bool(GEMINI_API_KEY)
     }
 
 @app.websocket("/ws/live")
-async def websocket_live_stream(websocket: WebSocket):
-    """WebSocket endpoint for receiving desktop screen frames and returning real-time Overlay HUD drawing coordinates & subtitles."""
+async def websocket_endpoint(websocket: WebSocket):
+    global prev_frame_bytes, is_streaming_active
     await websocket.accept()
-    print("🔌 Client connected to /ws/live endpoint")
-    prev_frame_bytes = None
+    print("[WebSocket] Client connected to /ws/live endpoint")
 
     try:
         while True:
-            # Receive data packet from Electron client
-            data = await websocket.receive_text()
-            packet = json.loads(data)
+            data_text = await websocket.receive_text()
+            packet = json.loads(data_text)
+            packet_type = packet.get("type")
 
-            packet_type = packet.get("type", "frame")
-            
             if packet_type == "frame":
-                # Base64 encoded JPEG screen capture frame
+                is_streaming_active = True
                 image_b64 = packet.get("image", "")
-                user_prompt = packet.get("prompt", None)
-                
-                if image_b64:
-                    image_bytes = base64.b64decode(image_b64)
-                    
-                    # Local OpenCV Motion Filter: Skip frame if screen hasn't changed & no explicit user prompt
-                    if not user_prompt and prev_frame_bytes:
-                        has_motion = VisionParser.detect_motion_or_changes(prev_frame_bytes, image_bytes, threshold=3.0)
-                        if not has_motion:
-                            # Send heartbeat to keep connection alive without wasting API tokens
-                            await websocket.send_json({"type": "skip", "message": "Frame unchanged"})
-                            continue
+                if not image_b64:
+                    continue
 
-                    prev_frame_bytes = image_bytes
+                curr_frame_bytes = base64.b64decode(image_b64)
+                has_changed = VisionParser.detect_motion_or_changes(prev_frame_bytes, curr_frame_bytes)
 
-                    # Process frame via Gemini API
-                    hud_data = await gemini_client.analyze_screen_frame(image_bytes, user_prompt)
-                    
-                    # Return HUD canvas overlay coordinates to Electron frontend
+                if has_changed:
+                    prev_frame_bytes = curr_frame_bytes
+                    hud_data = await gemini_client.analyze_screen_frame(curr_frame_bytes)
                     await websocket.send_json({
                         "type": "hud_update",
                         "data": hud_data
                     })
                     
             elif packet_type == "cli":
-                # CLI command requested by client
                 tool_name = packet.get("tool_name")
                 tool_args = packet.get("tool_args", {})
                 
@@ -111,19 +104,18 @@ async def websocket_live_stream(websocket: WebSocket):
                 audio_bytes = base64.b64decode(audio_b64)
                 image_bytes = base64.b64decode(image_b64) if image_b64 and is_streaming_active else None
                 
-                # Convert audio to Thai text (Speech-To-Text STT)
                 transcribed_text = await asyncio.to_thread(STTTranscriber.transcribe_audio_bytes, audio_bytes, mime_type)
 
                 if transcribed_text and transcribed_text.strip():
-                    print(f"🎙️ Transcribed Thai text: '{transcribed_text}'")
+                    print(f"[STT Voice Text] '{transcribed_text}'")
                     voice_res = await gemini_client.chat_with_godji(transcribed_text, image_bytes)
                     reply_msg = voice_res.get("reply")
                     cli_cmd = voice_res.get("cli_command")
                     cli_output = voice_res.get("cli_output")
                 else:
-                    print("🎙️ STT returned empty (silent or quiet audio)")
+                    print("[STT Voice Text] Empty or silent audio")
                     transcribed_text = None
-                    reply_msg = "⚠️ ไม่ได้ยินเสียงพูด หรือเสียงเบาเกินไป โปรดกดไมค์แล้วพูดใหม่อีกครั้งครับ"
+                    reply_msg = "ไม่ได้ยินเสียงพูด หรือเสียงเบาเกินไป โปรดกดไมค์แล้วพูดใหม่อีกครั้งครับ"
                     cli_cmd = None
                     cli_output = None
 
@@ -135,12 +127,10 @@ async def websocket_live_stream(websocket: WebSocket):
                     "transcribed_text": transcribed_text
                 })
 
-
-
     except WebSocketDisconnect:
-        print("🔌 Client disconnected from /ws/live endpoint")
+        print("[WebSocket] Client disconnected")
     except Exception as e:
-        print(f"⚠️ Error in /ws/live websocket stream: {e}")
+        print(f"[WebSocket Error] {e}")
 
 if __name__ == "__main__":
     import uvicorn

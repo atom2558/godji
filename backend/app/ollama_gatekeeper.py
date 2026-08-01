@@ -3,7 +3,6 @@ import json
 import asyncio
 
 OLLAMA_API_URL = "http://localhost:11434/api/generate"
-# Use user's installed qwen2.5:0.5b or tinyllama for sub-second intent check
 OLLAMA_MODEL = "qwen2.5:0.5b"
 
 class OllamaGatekeeper:
@@ -14,12 +13,10 @@ class OllamaGatekeeper:
     @classmethod
     def _query_ollama_sync(cls, text_prompt: str) -> bool:
         prompt_lower = text_prompt.lower()
-        # Fast local keyword check (0ms)
         if any(kw in prompt_lower for kw in cls.WAKE_KEYWORDS):
-            print(f"🛡️ [Ollama Gatekeeper] Wake word matched for '{text_prompt}' -> Forwarding to Gemini!")
+            print(f"[Ollama Gatekeeper] Wake word matched for '{text_prompt}'")
             return True
 
-        # Ask local Ollama (0.5B model) if the prompt is an AI command
         payload = json.dumps({
             "model": OLLAMA_MODEL,
             "prompt": (
@@ -41,12 +38,12 @@ class OllamaGatekeeper:
                     res_data = json.loads(response.read().decode('utf-8'))
                     res_text = res_data.get("response", "").strip().upper()
                     if "YES" in res_text:
-                        print(f"🛡️ [Ollama Gatekeeper] Ollama ({OLLAMA_MODEL}) intent=YES -> Forwarding to Gemini!")
+                        print(f"[Ollama Gatekeeper] Ollama intent=YES")
                         return True
         except Exception as e:
-            print(f"⚠️ [Ollama Gatekeeper] Ollama check offline/failed ({e}).")
+            print(f"[Ollama Gatekeeper] Check offline/skipped ({e})")
 
-        print(f"🛡️ [Ollama Gatekeeper] Ignored '{text_prompt}' -> 0 Gemini Tokens Wasted!")
+        print(f"[Ollama Gatekeeper] Ignored '{text_prompt}'")
         return False
 
     @classmethod
