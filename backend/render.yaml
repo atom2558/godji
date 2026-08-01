@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: godji-backend
+    env: docker
+    dockerfilePath: backend/Dockerfile
+    context: backend
+    plan: free
+    region: singapore
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: PORT
+        value: 8000

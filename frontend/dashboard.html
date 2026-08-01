@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>🐉 AI Godji Control Dashboard</title>
+  <style>
+    :root {
+      --bg-dark: #0b0f19;
+      --card-bg: #161e2e;
+      --accent-cyan: #06b6d4;
+      --accent-orange: #f97316;
+      --accent-green: #10b981;
+      --text-main: #f8fafc;
+      --text-sub: #94a3b8;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    body {
+      background: var(--bg-dark);
+      color: var(--text-main);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+    header {
+      background: rgba(22, 30, 46, 0.8);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 16px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand h1 {
+      font-size: 20px;
+      background: linear-gradient(135deg, #38bdf8, #06b6d4);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid #10b981;
+      color: #10b981;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .status-badge.offline {
+      background: rgba(239, 68, 68, 0.15);
+      border-color: #ef4444;
+      color: #ef4444;
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      gap: 20px;
+      padding: 20px;
+      overflow: hidden;
+    }
+    .sidebar {
+      background: var(--card-bg);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .content-area {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      overflow: hidden;
+    }
+    .control-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      padding: 16px;
+    }
+    .control-card h3 {
+      font-size: 14px;
+      color: var(--text-sub);
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .btn {
+      width: 100%;
+      padding: 12px;
+      border-radius: 10px;
+      border: none;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: all 0.2s ease;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #06b6d4, #0284c7);
+      color: white;
+      box-shadow: 0 4px 12px rgba(6, 182, 212, 0.3);
+    }
+    .btn-primary:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+    }
+    .btn-danger {
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      color: white;
+    }
+    .input-field {
+      width: 100%;
+      padding: 10px 14px;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      color: white;
+      font-size: 13px;
+      outline: none;
+    }
+    .input-field:focus {
+      border-color: var(--accent-cyan);
+    }
+    .console-panel {
+      flex: 1;
+      background: var(--card-bg);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+    }
+    .console-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .log-box {
+      flex: 1;
+      background: #070a12;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 10px;
+      padding: 14px;
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 13px;
+      color: #38bdf8;
+      overflow-y: auto;
+      line-height: 1.5;
+    }
+    .log-item {
+      margin-bottom: 6px;
+      word-break: break-all;
+    }
+    .log-item.info { color: #38bdf8; }
+    .log-item.success { color: #10b981; }
+    .log-item.warning { color: #f59e0b; }
+    .log-item.error { color: #ef4444; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <span style="font-size: 24px;">🐉</span>
+      <h1>AI Godji Control Center</h1>
+    </div>
+    <div id="statusBadge" class="status-badge offline">
+      <span class="status-dot"></span>
+      <span id="statusText">Disconnected</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="sidebar">
+      <div class="control-card">
+        <h3>Server WebSocket Connection</h3>
+        <input type="text" id="wsUrlInput" class="input-field" value="ws://localhost:8000/ws/live" placeholder="wss://godji-backend.onrender.com/ws/live" style="margin-bottom: 10px;">
+        <button id="connectBtn" class="btn btn-primary">Connect Backend</button>
+      </div>
+
+      <div class="control-card">
+        <h3>Screen Vision & Overlay</h3>
+        <button id="toggleVisionBtn" class="btn btn-primary" style="margin-bottom: 10px;">▶️ Start Real-time Vision</button>
+        <button id="toggleOverlayBtn" class="btn btn-primary" style="background: #334155;">👁️ Toggle HUD Overlay</button>
+      </div>
+
+      <div class="control-card">
+        <h3>CLI System Controller</h3>
+        <input type="text" id="cliCommandInput" class="input-field" placeholder="พิมพ์คำสั่ง CLI หรือสั่งงาน..." style="margin-bottom: 10px;">
+        <button id="runCliBtn" class="btn btn-primary" style="background: #8b5cf6;">🚀 Run CLI Command</button>
+      </div>
+    </section>
+
+    <section class="content-area">
+      <div class="console-panel">
+        <div class="console-header">
+          <h3 style="color: var(--text-sub); font-size: 14px;">LIVE ACTIVITY LOG & CLI RESULT</h3>
+          <button id="clearLogBtn" style="background: transparent; border: none; color: var(--text-sub); cursor: pointer; font-size: 12px;">Clear Log</button>
+        </div>
+        <div id="logBox" class="log-box">
+          <div class="log-item info">[System] AI Godji Dashboard Ready.</div>
+          <div class="log-item info">[System] Please connect to Backend WebSocket server (Local or Render).</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="dashboard.js"></script>
+</body>
+</html>

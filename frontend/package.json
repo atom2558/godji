@@ -1,0 +1,22 @@
+{
+  "name": "ai-godji-desktop",
+  "version": "1.0.0",
+  "description": "AI Godji Desktop Assistant & Screen HUD Overlay",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "keywords": [
+    "ai",
+    "assistant",
+    "electron",
+    "screen-overlay",
+    "hud",
+    "gemini"
+  ],
+  "author": "AI Godji Developer",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^30.0.0"
+  }
+}
