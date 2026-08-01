@@ -37,17 +37,13 @@ PORT = int(os.getenv("PORT", 8000))
 prev_frame_bytes = None
 is_streaming_active = False
 
-WAKE_KEYWORDS = [
-    "ก็อดจิ", "กอดจิ", "ก็อตจิ", "ก๊อดจิ", "godji", "เอไอ", 
-    "ช่วย", "ดู", "อ่าน", "เท่าไหร่", "ทำอะไร", "สร้าง", "เปิด", 
-    "บทความ", "หน้าจอ", "ภาพ", "คำนวณ", "สวัสดี"
-]
+STRICT_WAKE_WORDS = ["ก็อดจิ", "กอดจิ", "ก็อตจิ", "ก๊อดจิ", "godji", "ก็อด"]
 
-def is_wake_word_or_command(text: str) -> bool:
+def check_wake_word(text: str):
     if not text or not text.strip():
         return False
     lower = text.lower()
-    return any(kw in lower for kw in WAKE_KEYWORDS)
+    return any(w in lower for w in STRICT_WAKE_WORDS)
 
 @app.get("/")
 def read_root():
@@ -114,26 +110,35 @@ async def websocket_endpoint(websocket: WebSocket):
                 image_b64 = packet.get("image", None)
                 
                 audio_bytes = base64.b64decode(audio_b64)
-                # Decode screen snapshot whenever provided by client for Moondream Vision
                 image_bytes = base64.b64decode(image_b64) if image_b64 else None
                 
                 transcribed_text = await asyncio.to_thread(STTTranscriber.transcribe_audio_bytes, audio_bytes, mime_type)
 
                 if transcribed_text and transcribed_text.strip():
-                    print(f"[STT Voice Text] '{transcribed_text}'")
-                    # Wake Word Filter: Only answer if prompt contains wake word or command
-                    if is_wake_word_or_command(transcribed_text):
-                        voice_res = await gemini_client.chat_with_godji(transcribed_text, image_bytes)
-                        reply_msg = voice_res.get("reply")
-                        cli_cmd = voice_res.get("cli_command")
-                        cli_output = voice_res.get("cli_output")
+                    has_wake_word = check_wake_word(transcribed_text)
+                    
+                    if has_wake_word:
+                        print(f"🐉 [WAKE WORD DETECTED] Prompt: '{transcribed_text}'")
+                        cleaned_prompt = transcribed_text
+                        for w in STRICT_WAKE_WORDS:
+                            cleaned_prompt = cleaned_prompt.replace(w, "").strip()
+
+                        # If user ONLY said "ก็อดจิ" without extra prompt
+                        if not cleaned_prompt or len(cleaned_prompt) < 2:
+                            reply_msg = "ครับผม! มีอะไรให้ก็อดจิช่วยดูแลบอกได้เลยครับ"
+                            cli_cmd = None
+                            cli_output = None
+                        else:
+                            voice_res = await gemini_client.chat_with_godji(transcribed_text, image_bytes)
+                            reply_msg = voice_res.get("reply")
+                            cli_cmd = voice_res.get("cli_command")
+                            cli_output = voice_res.get("cli_output")
                     else:
-                        print(f"[STT Voice Filter] Ignored background noise without wake word: '{transcribed_text}'")
+                        print(f"[STT Silent Filter] Ignored audio without wake word 'ก็อดจิ': '{transcribed_text}'")
                         reply_msg = None
                         cli_cmd = None
                         cli_output = None
                 else:
-                    print("[STT Voice Text] Empty or silent audio - ignored")
                     transcribed_text = None
                     reply_msg = None
                     cli_cmd = None
