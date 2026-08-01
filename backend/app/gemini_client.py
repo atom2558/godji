@@ -63,8 +63,8 @@ class GeminiAssistantClient:
                 "จุดยิงดัก (lead_dots), และทิศทาง (arrows) ในรูปแบบ JSON พร้อมข้อความ Subtitle คำอธิบาย"
             )
 
-            # Generate content using Gemini 1.5 Flash Vision
-            response = self.model.generate_content([prompt_text, image])
+            # Generate content using Gemini with automatic multi-model fallback on 429
+            response = self._generate_content_with_fallback([prompt_text, image])
 
             raw_text = response.text or ""
             parsed_hud = VisionParser.parse_gemini_hud_response(raw_text)
@@ -78,6 +78,33 @@ class GeminiAssistantClient:
                 "lead_dots": [],
                 "arrows": []
             }
+
+    def _generate_content_with_fallback(self, contents: list):
+        """Helper to generate content, automatically trying alternative models if 429 Quota is hit."""
+        models_to_try = [
+            "gemini-2.5-flash",
+            "gemini-2.0-flash-lite",
+            "gemini-2.0-flash",
+            "gemini-2.5-pro"
+        ]
+        
+        last_exception = None
+        for model_name in models_to_try:
+            try:
+                m = genai.GenerativeModel(model_name=model_name, system_instruction=self.system_prompt)
+                res = m.generate_content(contents)
+                return res
+            except Exception as e:
+                err_str = str(e)
+                if "429" in err_str or "quota" in err_str.lower():
+                    print(f"⚠️ Model '{model_name}' hit 429 rate limit! Auto-switching to next model...")
+                    last_exception = e
+                    continue
+                else:
+                    raise e
+                    
+        if last_exception:
+            raise last_exception
 
     async def process_cli_command(self, tool_name: str, tool_args: dict) -> dict:
         """Handle CLI tool calls executed by AI Godji."""
@@ -123,7 +150,7 @@ class GeminiAssistantClient:
                 image = Image.open(io.BytesIO(image_bytes))
                 prompt_content.append(image)
 
-            response = self.model.generate_content(prompt_content)
+            response = self._generate_content_with_fallback(prompt_content)
             raw_text = response.text or ""
 
             reply_text = raw_text
@@ -199,7 +226,7 @@ class GeminiAssistantClient:
                 image = Image.open(io.BytesIO(image_bytes))
                 prompt_content.append(image)
 
-            response = self.model.generate_content(prompt_content)
+            response = self._generate_content_with_fallback(prompt_content)
             raw_text = response.text or ""
 
             reply_text = raw_text
