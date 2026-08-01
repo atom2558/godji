@@ -46,43 +46,59 @@ class GeminiAssistantClient:
         return ""
 
     def _query_qwen_text(self, prompt: str) -> str:
-        """Query local Qwen2.5:7b LLM for Thai reasoning and CLI command synthesis."""
+        """Query 9arm Gateway API for ultra-fast Thai reasoning and CLI command synthesis."""
         try:
+            url = "https://gateway.9arm.co/v1/chat/completions"
+            api_key = "sk-DvdsqHV_M5uxfQm3wWPWNA"
+            model_name = "qwen3.6-35b-a3b"
+            
             payload = json.dumps({
-                "model": self.text_model,
-                "prompt": (
-                    "คุณคือ AI Godji ผู้ช่วยคอมพิวเตอร์ประจำตัวระดับสูง (ADA V2 Architecture)\n"
-                    "คุณต้องตอบเป็นภาษาไทยอย่างเดียวเท่านั้น 100% ห้ามใช้ภาษารัสเซียหรือภาษาอื่นโดยเด็ดขาด!\n"
-                    "ตอบอย่างสุภาพ น่ารัก ชัดเจน และแนะนำแนวทางภาษาไทยอย่างถูกต้อง\n"
-                    "หากผู้ใช้สั่งงานระบบ (เช่น สร้างโฟลเดอร์, เปิดเว็บ, สร้างไฟล์, ลบไฟล์, หรือรันคำสั่ง terminal) "
-                    "ให้ตอบด้วยรูปแบบ JSON ดังนี้เท่านั้น:\n"
-                    "```json\n"
-                    "{\n"
-                    '  "reply": "ข้อความตอบกลับภาษาไทยอย่างสุภาพและแนะนำแนวทางครับ",\n'
-                    '  "cli_command": "คำสั่ง terminal ที่จะรัน (ถ้ามี หากไม่มีให้ใส่ null)"\n'
-                    "}\n"
-                    "```\n"
-                    f"ข้อความผู้ใช้: {prompt}"
-                ),
-                "stream": False
+                "model": model_name,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": (
+                            "คุณคือ AI Godji ผู้ช่วยคอมพิวเตอร์ประจำตัวระดับสูง (ADA V2 Architecture)\n"
+                            "คุณต้องตอบเป็นภาษาไทยอย่างเดียวเท่านั้น 100% ห้ามใช้ภาษารัสเซียหรือภาษาอื่นโดยเด็ดขาด!\n"
+                            "ตอบอย่างสุภาพ น่ารัก ชัดเจน และแนะนำแนวทางภาษาไทยอย่างถูกต้อง\n"
+                            "หากผู้ใช้สั่งงานระบบ (เช่น สร้างโฟลเดอร์, เปิดเว็บ, สร้างไฟล์, ลบไฟล์, หรือรันคำสั่ง terminal) "
+                            "ให้ตอบด้วยรูปแบบ JSON ดังนี้เท่านั้น:\n"
+                            "```json\n"
+                            "{\n"
+                            '  "reply": "ข้อความตอบกลับภาษาไทยอย่างสุภาพและแนะนำแนวทางครับ",\n'
+                            '  "cli_command": "คำสั่ง terminal ที่จะรัน (ถ้ามี หากไม่มีให้ใส่ null)"\n'
+                            "}\n"
+                            "```"
+                        )
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                "temperature": 0.7
             }).encode('utf-8')
 
             req = urllib.request.Request(
-                self.ollama_url,
+                url,
                 data=payload,
-                headers={'Content-Type': 'application/json'}
+                headers={
+                    'Content-Type': 'application/json',
+                    'Authorization': f'Bearer {api_key}'
+                }
             )
-            # 120s timeout for CPU-bound Ollama inference speed (Qwen 7b takes time!)
-            with urllib.request.urlopen(req, timeout=120) as resp:
+            
+            # Ultra-fast cloud API should reply within seconds
+            with urllib.request.urlopen(req, timeout=30) as resp:
                 if resp.status == 200:
                     data = json.loads(resp.read().decode('utf-8'))
-                    res_text = data.get("response", "").strip()
+                    res_text = data["choices"][0]["message"]["content"].strip()
                     if res_text:
                         return res_text
         except Exception as e:
-            print(f"[Qwen Text Error]: {e}")
+            print(f"[9arm Gateway API Error]: {e}")
 
-        return "สวัสดีครับ! ผม AI Godji พร้อมช่วยเหลือและตอบภาษาไทยครับ!"
+        return "ขออภัยครับ ระบบเชื่อมต่อเซิร์ฟเวอร์มีปัญหา กรุณาลองใหม่อีกครั้งครับ!"
 
     async def analyze_screen_frame(self, image_bytes: bytes, user_prompt: str = None) -> dict:
         """ADA V2 Local Vision Architecture (0 API Calls, 60 FPS OpenCV HUD)."""

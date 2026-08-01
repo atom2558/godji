@@ -58,7 +58,7 @@ connectBtn.addEventListener('click', () => {
           log(`🚀 CLI [${msg.tool_name}] Result: ${JSON.stringify(msg.result)}`, 'success');
         } else if (msg.type === 'chat_stt_result') {
           log(`🎙️ เสียงถูกแปลงเป็นข้อความ: "${msg.transcribed_text}"`, 'info');
-          log(`🧠 AI Godji กำลังคิดคำตอบ... (Ollama Local AI อาจใช้เวลาประมวลผล 10-30 วินาทีตามสเปคคอมพิวเตอร์)`, 'warning');
+          log(`🧠 AI Godji กำลังคิดคำตอบ... (ประมวลผลผ่าน 9arm Gateway API)`, 'warning');
         } else if (msg.type === 'chat_reply') {
           // Don't log transcribed_text again since chat_stt_result already handled it
           if (msg.reply) {
