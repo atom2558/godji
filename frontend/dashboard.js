@@ -97,8 +97,15 @@ connectBtn.addEventListener('click', () => {
     ws.onclose = () => {
       statusBadge.className = 'status-badge offline';
       statusText.innerText = 'Disconnected';
-      log('WebSocket connection closed.', 'warning');
+      log('WebSocket connection closed. Retrying in 2 seconds...', 'warning');
       connectBtn.innerText = 'Connect Backend';
+      
+      // Auto-reconnect loop
+      setTimeout(() => {
+        if (!ws || ws.readyState === WebSocket.CLOSED) {
+          connectBtn.click();
+        }
+      }, 2000);
       stopStreaming();
     };
   } catch (err) {
@@ -488,28 +495,20 @@ if (chatInput) {
   });
 }
 
-// Auto-Connect and Auto-Start Settings on Launch (1-Click One-Stop Automation)
-window.addEventListener('DOMContentLoaded', () => {
+// Auto-Connect and Auto-Start Settings on Launch (Immediate & Reconnect)
+function autoInit() {
   setTimeout(() => {
     // 1. Auto-connect WebSocket to local server
     if (connectBtn && (!ws || ws.readyState !== WebSocket.OPEN)) {
       connectBtn.click();
     }
-    
-    // 2. Auto-start Real-time Vision stream
-    setTimeout(() => {
-      if (toggleVisionBtn && !isStreaming && ws && ws.readyState === WebSocket.OPEN) {
-        startStreaming();
-      }
-    }, 1200);
+  }, 300);
+}
 
-    // 3. Auto-enable Handsfree Continuous Voice Mode (ADA V2 Style)
-    setTimeout(async () => {
-      if (continuousVoiceBtn && !isContinuousVoice && ws && ws.readyState === WebSocket.OPEN) {
-        continuousVoiceBtn.click();
-      }
-    }, 2200);
-  }, 600);
-});
+if (document.readyState === 'loading') {
+  window.addEventListener('DOMContentLoaded', autoInit);
+} else {
+  autoInit();
+}
 
 
