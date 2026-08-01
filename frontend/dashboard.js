@@ -3,6 +3,8 @@ let captureInterval = null;
 let isStreaming = false;
 
 const wsUrlInput = document.getElementById('wsUrlInput');
+let currentStreamLogId = null;
+let ttsSentenceBuffer = "";
 const connectBtn = document.getElementById('connectBtn');
 const toggleVisionBtn = document.getElementById('toggleVisionBtn');
 const toggleOverlayBtn = document.getElementById('toggleOverlayBtn');
@@ -13,13 +15,21 @@ const statusBadge = document.getElementById('statusBadge');
 const statusText = document.getElementById('statusText');
 const clearLogBtn = document.getElementById('clearLogBtn');
 
-function log(message, type = 'info') {
+function log(message, type = 'info', isStream = false) {
   const time = new Date().toLocaleTimeString();
   const div = document.createElement('div');
   div.className = `log-item ${type}`;
   div.innerText = `[${time}] ${message}`;
   logBox.appendChild(div);
   logBox.scrollTop = logBox.scrollHeight;
+  return div;
+}
+
+function appendLog(div, chunk) {
+  if (div) {
+    div.innerText += chunk;
+    logBox.scrollTop = logBox.scrollHeight;
+  }
 }
 
 clearLogBtn.addEventListener('click', () => {
@@ -59,11 +69,37 @@ connectBtn.addEventListener('click', () => {
         } else if (msg.type === 'chat_stt_result') {
           log(`🎙️ เสียงถูกแปลงเป็นข้อความ: "${msg.transcribed_text}"`, 'info');
           log(`🧠 AI Godji กำลังคิดคำตอบ... (ประมวลผลผ่าน 9arm Gateway API)`, 'warning');
+          currentStreamLogId = null;
+          ttsSentenceBuffer = "";
+        } else if (msg.type === 'chat_reply_chunk') {
+          if (!currentStreamLogId) {
+            currentStreamLogId = log(`🐉 Godji: ${msg.chunk}`, 'success', true);
+            ttsSentenceBuffer = msg.chunk;
+          } else {
+            appendLog(currentStreamLogId, msg.chunk);
+            ttsSentenceBuffer += msg.chunk;
+          }
+          
+          // Check for punctuation to trigger TTS sentence by sentence
+          if (/[.!?\n]/.test(msg.chunk) || msg.chunk.includes('ครับ') || msg.chunk.includes('ค่ะ') || msg.chunk.includes('คะ') || msg.chunk.includes('ไหร่')) {
+             if (ttsSentenceBuffer.trim().length > 0) {
+                 speakText(ttsSentenceBuffer.trim());
+                 ttsSentenceBuffer = "";
+             }
+          }
         } else if (msg.type === 'chat_reply') {
-          // Don't log transcribed_text again since chat_stt_result already handled it
           if (msg.reply) {
-            log(`🐉 Godji: ${msg.reply}`, 'success');
-            speakText(msg.reply);
+            if (!currentStreamLogId) {
+              log(`🐉 Godji: ${msg.reply}`, 'success');
+              speakText(msg.reply);
+            } else {
+              // Finish any remaining TTS buffer
+              if (ttsSentenceBuffer.trim().length > 0) {
+                 speakText(ttsSentenceBuffer.trim());
+                 ttsSentenceBuffer = "";
+              }
+              currentStreamLogId = null;
+            }
           }
           if (msg.cli_command) {
             log(`⚡ Godji สั่งรันคำสั่ง: ${msg.cli_command}`, 'warning');
@@ -287,7 +323,7 @@ async function startRecording() {
     let hasSpoken = false;
     let consecutiveVoiceFrames = 0;
     const VOICE_THRESHOLD = 15.0; // Energy threshold above PC fan static
-    const SILENCE_TIMEOUT = 2500; // 2.5s silence after speech before sending
+    const SILENCE_TIMEOUT = 1800; // 1.8s silence after speech before sending
 
     function checkSilence() {
       if (!isRecording) return;

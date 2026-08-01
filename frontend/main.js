@@ -77,7 +77,13 @@ function createWindows() {
 
   dashboardWindow.on('closed', () => {
     if (overlayWindow) overlayWindow.close();
-    if (pyBackendProcess) pyBackendProcess.kill();
+    if (pyBackendProcess) {
+      if (process.platform === 'win32') {
+        exec(`taskkill /pid ${pyBackendProcess.pid} /T /F`);
+      } else {
+        pyBackendProcess.kill();
+      }
+    }
     app.quit();
   });
 }
@@ -92,7 +98,13 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-  if (pyBackendProcess) pyBackendProcess.kill();
+  if (pyBackendProcess) {
+    if (process.platform === 'win32') {
+      exec(`taskkill /pid ${pyBackendProcess.pid} /T /F`);
+    } else {
+      pyBackendProcess.kill();
+    }
+  }
   if (process.platform !== 'darwin') app.quit();
 });
 
@@ -106,8 +118,8 @@ ipcMain.handle('capture-screen', async () => {
 
     if (sources.length > 0) {
       const primarySource = sources[0];
-      const imagePng = primarySource.thumbnail.toPNG();
-      return imagePng.toString('base64');
+      const imageJpeg = primarySource.thumbnail.toJPEG(70);
+      return imageJpeg.toString('base64');
     }
     return null;
   } catch (error) {

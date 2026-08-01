@@ -107,7 +107,12 @@ async def websocket_endpoint(websocket: WebSocket):
                 image_b64 = packet.get("image", None)
                 image_bytes = base64.b64decode(image_b64) if image_b64 else None
                 
-                chat_res = await gemini_client.chat_with_godji(user_msg, image_bytes)
+                async def on_chat_stream(chunk_text):
+                    await websocket.send_json({
+                        "type": "chat_reply_chunk",
+                        "chunk": chunk_text
+                    })
+                chat_res = await gemini_client.chat_with_godji(user_msg, image_bytes, stream_callback=on_chat_stream)
                 await websocket.send_json({
                     "type": "chat_reply",
                     "reply": chat_res.get("reply"),
@@ -154,7 +159,13 @@ async def websocket_endpoint(websocket: WebSocket):
                             })
                             continue
                         else:
-                            voice_res = await gemini_client.chat_with_godji(transcribed_text, image_bytes)
+                            async def on_stream(chunk_text):
+                                await websocket.send_json({
+                                    "type": "chat_reply_chunk",
+                                    "chunk": chunk_text
+                                })
+                                
+                            voice_res = await gemini_client.chat_with_godji(transcribed_text, image_bytes, stream_callback=on_stream)
                             reply_msg = voice_res.get("reply")
                             cli_cmd = voice_res.get("cli_command")
                             cli_output = voice_res.get("cli_output")
