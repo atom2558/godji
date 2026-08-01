@@ -53,14 +53,14 @@ connectBtn.addEventListener('click', () => {
         if (msg.type === 'hud_update') {
           // Send HUD data to Electron main process to render on transparent canvas
           window.godjiAPI.sendDrawHUD(msg.data);
-          if (msg.data.subtitles) {
-            log(`🐉 Godji: ${msg.data.subtitles}`, 'success');
-          }
+          // Vision Stream updates HUD silently - NO TTS here!
         } else if (msg.type === 'cli_result') {
           log(`🚀 CLI [${msg.tool_name}] Result: ${JSON.stringify(msg.result)}`, 'success');
         } else if (msg.type === 'chat_reply') {
-          log(`🐉 Godji: ${msg.reply}`, 'success');
-          speakText(msg.reply);
+          if (msg.reply) {
+            log(`🐉 Godji: ${msg.reply}`, 'success');
+            speakText(msg.reply);
+          }
           if (msg.cli_command) {
             log(`⚡ Godji สั่งรันคำสั่ง: ${msg.cli_command}`, 'warning');
           }
@@ -173,6 +173,9 @@ let isTTSEnabled = true;
 let isRecording = false;
 let mediaRecorder = null;
 let audioChunks = [];
+let audioContext = null;
+let silenceTimer = null;
+let animFrameId = null;
 
 if (micBtn) {
   micBtn.addEventListener('click', async () => {
@@ -192,6 +195,17 @@ async function startRecording() {
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    
+    // Set up Web Audio API VAD (Voice Activity Detection)
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 512;
+    const source = audioContext.createMediaStreamSource(stream);
+    source.connect(analyser);
+
+    const bufferLength = analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+
     mediaRecorder = new MediaRecorder(stream);
     audioChunks = [];
 
@@ -200,15 +214,27 @@ async function startRecording() {
     };
 
     mediaRecorder.onstop = async () => {
+      if (animFrameId) cancelAnimationFrame(animFrameId);
+      if (silenceTimer) clearTimeout(silenceTimer);
+      if (audioContext && audioContext.state !== 'closed') audioContext.close();
+
       const mimeType = mediaRecorder.mimeType || 'audio/webm';
       const audioBlob = new Blob(audioChunks, { type: mimeType });
+      
+      if (audioBlob.size < 1000) {
+        log('⚠️ เสียงสั้นเกินไป ไม่ถูกส่ง', 'warning');
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
+
       const reader = new FileReader();
       reader.readAsDataURL(audioBlob);
       reader.onloadend = async () => {
         const base64Audio = reader.result.split(',')[1];
-        const base64Frame = await window.godjiAPI.captureScreen();
+        // ONLY capture screen if Vision Stream is ACTIVE (isStreaming === true)
+        const base64Frame = isStreaming ? await window.godjiAPI.captureScreen() : null;
         
-        log('🎙️ ส่งเสียงอัดของคุณไปให้ Gemini 2.5 Flash ประมวลผล...', 'info');
+        log('🎙️ ส่งเสียงของคุณไปให้ AI Godji ประมวลผล...', 'info');
         ws.send(JSON.stringify({
           type: 'voice_chat',
           audio: base64Audio,
@@ -222,8 +248,38 @@ async function startRecording() {
     mediaRecorder.start();
     isRecording = true;
     micBtn.style.background = '#ef4444';
-    micBtn.innerText = '🛑';
-    log('🎙️ กำลังอัดเสียง... พูดเสร็จแล้วกดปุ่ม 🛑 อีกครั้งเพื่อส่งหา Godji ครับ', 'info');
+    micBtn.innerText = '🎙️ (กำลังฟัง...)';
+    log('🎙️ เริ่มฟังเสียง... เมื่อพูดจบและเงียบเสียง ระบบจะส่งให้อัตโนมัติครับ', 'info');
+
+    let hasSpoken = false;
+    const SILENCE_THRESHOLD = 15;
+    const SILENCE_TIMEOUT = 1200; // 1.2s silence to auto-send
+
+    function checkSilence() {
+      if (!isRecording) return;
+      analyser.getByteFrequencyData(dataArray);
+      let sum = 0;
+      for (let i = 0; i < bufferLength; i++) sum += dataArray[i];
+      let average = sum / bufferLength;
+
+      if (average > SILENCE_THRESHOLD) {
+        hasSpoken = true;
+        if (silenceTimer) {
+          clearTimeout(silenceTimer);
+          silenceTimer = null;
+        }
+      } else if (hasSpoken && !silenceTimer) {
+        silenceTimer = setTimeout(() => {
+          log('🎙️ เงียบเสียงแล้ว หยุดอัดและส่งให้อัตโนมัติ...', 'info');
+          stopRecording();
+        }, SILENCE_TIMEOUT);
+      }
+
+      animFrameId = requestAnimationFrame(checkSilence);
+    }
+
+    checkSilence();
+
   } catch (err) {
     log(`⚠️ ไม่สามารถเปิดไมโครโฟนได้: ${err.message}`, 'error');
   }
@@ -231,8 +287,8 @@ async function startRecording() {
 
 function stopRecording() {
   if (mediaRecorder && isRecording) {
-    mediaRecorder.stop();
     isRecording = false;
+    mediaRecorder.stop();
     micBtn.style.background = '#ec4899';
     micBtn.innerText = '🎙️';
   }
@@ -247,9 +303,14 @@ if (ttsToggleBtn) {
 }
 
 function speakText(text) {
-  if (!isTTSEnabled || !('speechSynthesis' in window)) return;
+  if (!isTTSEnabled || !('speechSynthesis' in window) || !text) return;
+  
+  // Clean raw JSON or markdown symbols if present
+  let cleanText = text.replace(/```[\s\S]*?```/g, '').replace(/[\{\}\[\]\*\_\#]/g, '').strip?.() || text;
+  if (!cleanText.trim()) return;
+
   window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(text);
+  const utterance = new SpeechSynthesisUtterance(cleanText);
   utterance.lang = 'th-TH';
   utterance.rate = 1.0;
   window.speechSynthesis.speak(utterance);
@@ -266,7 +327,8 @@ async function sendChatMessage(msgText) {
 
   log(`💬 คุณ: ${text}`, 'info');
 
-  const base64Frame = await window.godjiAPI.captureScreen();
+  // ONLY capture screen if Vision Stream is ACTIVE (isStreaming === true)
+  const base64Frame = isStreaming ? await window.godjiAPI.captureScreen() : null;
 
   ws.send(JSON.stringify({
     type: 'chat',
@@ -285,4 +347,5 @@ if (chatInput) {
     if (e.key === 'Enter') sendChatMessage();
   });
 }
+
 

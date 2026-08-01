@@ -64,5 +64,8 @@ class VisionParser:
                 pass
 
         # Text fallback parse if model responds with natural text
-        hud_data["subtitles"] = raw_text.strip()
+        clean_subtitle = raw_text.strip()
+        if clean_subtitle.startswith("```") or clean_subtitle.startswith("{"):
+            clean_subtitle = "พบความเคลื่อนไหวและองค์ประกอบบนหน้าจอครับ"
+        hud_data["subtitles"] = clean_subtitle
         return hud_data
