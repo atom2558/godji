@@ -174,9 +174,10 @@ const ttsToggleBtn = document.getElementById('ttsToggleBtn');
 
 let isTTSEnabled = true;
 let isRecording = false;
-let mediaRecorder = null;
-let audioChunks = [];
+let micStream = null;
 let audioContext = null;
+let scriptProcessor = null;
+let pcmBuffers = [];
 let silenceTimer = null;
 let animFrameId = null;
 
@@ -190,6 +191,38 @@ if (micBtn) {
   });
 }
 
+function encodeWAV(samples, sampleRate = 16000) {
+  const buffer = new ArrayBuffer(44 + samples.length * 2);
+  const view = new DataView(buffer);
+
+  const writeString = (v, o, str) => {
+    for (let i = 0; i < str.length; i++) v.setUint8(o + i, str.charCodeAt(i));
+  };
+
+  writeString(view, 0, 'RIFF');
+  view.setUint32(4, 36 + samples.length * 2, true);
+  writeString(view, 8, 'WAVE');
+  writeString(view, 12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM format
+  view.setUint16(22, 1, true); // Mono
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true); // 16-bit
+  writeString(view, 36, 'data');
+  view.setUint32(40, samples.length * 2, true);
+
+  let offset = 44;
+  for (let i = 0; i < samples.length; i++) {
+    let s = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    offset += 2;
+  }
+
+  return new Blob([view], { type: 'audio/wav' });
+}
+
 async function startRecording() {
   if (!ws || ws.readyState !== WebSocket.OPEN) {
     log('โปรดเชื่อมต่อ Backend WebSocket ก่อนใช้ไมโครโฟน!', 'warning');
@@ -197,66 +230,36 @@ async function startRecording() {
   }
 
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    
-    // Set up Web Audio API VAD (Voice Activity Detection)
-    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+    const source = audioContext.createMediaStreamSource(micStream);
+
+    pcmBuffers = [];
+    scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+    scriptProcessor.onaudioprocess = (e) => {
+      if (!isRecording) return;
+      const inputData = e.inputBuffer.getChannelData(0);
+      pcmBuffers.push(new Float32Array(inputData));
+    };
+
+    source.connect(scriptProcessor);
+    scriptProcessor.connect(audioContext.destination);
+
     const analyser = audioContext.createAnalyser();
     analyser.fftSize = 512;
-    const source = audioContext.createMediaStreamSource(stream);
     source.connect(analyser);
 
     const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
 
-    mediaRecorder = new MediaRecorder(stream);
-    audioChunks = [];
-
-    mediaRecorder.ondataavailable = (event) => {
-      if (event.data.size > 0) audioChunks.push(event.data);
-    };
-
-    mediaRecorder.onstop = async () => {
-      if (animFrameId) cancelAnimationFrame(animFrameId);
-      if (silenceTimer) clearTimeout(silenceTimer);
-      if (audioContext && audioContext.state !== 'closed') audioContext.close();
-
-      const mimeType = mediaRecorder.mimeType || 'audio/webm';
-      const audioBlob = new Blob(audioChunks, { type: mimeType });
-      
-      if (audioBlob.size < 1000) {
-        log('⚠️ เสียงสั้นเกินไป ไม่ถูกส่ง', 'warning');
-        stream.getTracks().forEach(track => track.stop());
-        return;
-      }
-
-      const reader = new FileReader();
-      reader.readAsDataURL(audioBlob);
-      reader.onloadend = async () => {
-        const base64Audio = reader.result.split(',')[1];
-        // ONLY capture screen if Vision Stream is ACTIVE (isStreaming === true)
-        const base64Frame = isStreaming ? await window.godjiAPI.captureScreen() : null;
-        
-        log('🎙️ ส่งเสียงของคุณไปให้ AI Godji ประมวลผล...', 'info');
-        ws.send(JSON.stringify({
-          type: 'voice_chat',
-          audio: base64Audio,
-          mime_type: mimeType,
-          image: base64Frame
-        }));
-      };
-      stream.getTracks().forEach(track => track.stop());
-    };
-
-    mediaRecorder.start();
     isRecording = true;
     micBtn.style.background = '#ef4444';
     micBtn.innerText = '🎙️ (กำลังฟัง...)';
     log('🎙️ เริ่มฟังเสียง... เมื่อพูดจบและเงียบเสียง ระบบจะส่งให้อัตโนมัติครับ', 'info');
 
     let hasSpoken = false;
-    const SILENCE_THRESHOLD = 15;
-    const SILENCE_TIMEOUT = 1200; // 1.2s silence to auto-send
+    const SILENCE_THRESHOLD = 12;
+    const SILENCE_TIMEOUT = 1200;
 
     function checkSilence() {
       if (!isRecording) return;
@@ -289,12 +292,50 @@ async function startRecording() {
 }
 
 function stopRecording() {
-  if (mediaRecorder && isRecording) {
-    isRecording = false;
-    mediaRecorder.stop();
-    micBtn.style.background = '#ec4899';
-    micBtn.innerText = '🎙️';
+  if (!isRecording) return;
+  isRecording = false;
+
+  micBtn.style.background = '#ec4899';
+  micBtn.innerText = '🎙️';
+
+  if (animFrameId) cancelAnimationFrame(animFrameId);
+  if (silenceTimer) clearTimeout(silenceTimer);
+
+  let totalLen = 0;
+  for (let b of pcmBuffers) totalLen += b.length;
+  
+  if (totalLen < 16000 * 0.3) {
+    log('⚠️ เสียงสั้นเกินไป ไม่ถูกส่ง', 'warning');
+    if (micStream) micStream.getTracks().forEach(t => t.stop());
+    if (audioContext && audioContext.state !== 'closed') audioContext.close();
+    return;
   }
+
+  let samples = new Float32Array(totalLen);
+  let offset = 0;
+  for (let b of pcmBuffers) {
+    samples.set(b, offset);
+    offset += b.length;
+  }
+
+  const wavBlob = encodeWAV(samples, 16000);
+  const reader = new FileReader();
+  reader.readAsDataURL(wavBlob);
+  reader.onloadend = async () => {
+    const base64Audio = reader.result.split(',')[1];
+    const base64Frame = isStreaming ? await window.godjiAPI.captureScreen() : null;
+    
+    log('🎙️ ส่งไฟล์เสียง WAV ไปให้ AI Godji ถอดความภาษาไทย...', 'info');
+    ws.send(JSON.stringify({
+      type: 'voice_chat',
+      audio: base64Audio,
+      mime_type: 'audio/wav',
+      image: base64Frame
+    }));
+
+    if (micStream) micStream.getTracks().forEach(t => t.stop());
+    if (audioContext && audioContext.state !== 'closed') audioContext.close();
+  };
 }
 
 if (ttsToggleBtn) {
