@@ -265,17 +265,21 @@ async function startRecording() {
     log('🎙️ เริ่มฟังเสียง... เมื่อพูดจบระบบจะส่งให้อัตโนมัติครับ', 'info');
 
     let hasSpoken = false;
-    const SILENCE_THRESHOLD = 8; // Optimal sensitivity
-    const SILENCE_TIMEOUT = 1200;
+    const VOICE_THRESHOLD = 5.0; // Voice frequency energy threshold
+    const SILENCE_TIMEOUT = 750; // Fast 0.75s silence timeout after speaking
 
     function checkSilence() {
       if (!isRecording) return;
       analyser.getByteFrequencyData(dataArray);
-      let sum = 0;
-      for (let i = 0; i < bufferLength; i++) sum += dataArray[i];
-      let average = sum / bufferLength;
 
-      if (average > SILENCE_THRESHOLD) {
+      // Focus strictly on human voice frequency range (80Hz - 3400Hz, FFT bins 2 to 45)
+      let voiceSum = 0;
+      for (let i = 2; i < 45; i++) {
+        voiceSum += dataArray[i];
+      }
+      let voiceEnergy = voiceSum / 43.0;
+
+      if (voiceEnergy > VOICE_THRESHOLD) {
         hasSpoken = true;
         if (silenceTimer) {
           clearTimeout(silenceTimer);
@@ -283,7 +287,7 @@ async function startRecording() {
         }
       } else if (hasSpoken && !silenceTimer) {
         silenceTimer = setTimeout(() => {
-          log('🎙️ เงียบเสียงแล้ว หยุดอัดและส่งให้อัตโนมัติ...', 'info');
+          log('🎙️ พูดจบและเงียบเสียงแล้ว... ส่งไฟล์เสียงไปให้ AI Godji ทันที!', 'info');
           stopRecording();
         }, SILENCE_TIMEOUT);
       }
