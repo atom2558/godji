@@ -104,7 +104,39 @@ class GeminiAssistantClient:
                     raise e
                     
         if last_exception:
-            raise last_exception
+            print("⚠️ All Gemini models hit 429/quota limits! Auto-routing to Local Ollama...")
+            # Create a mock response object wrapping Ollama local response
+            ollama_reply = self._query_ollama_local(contents)
+            class OllamaResponseMock:
+                def __init__(self, text):
+                    self.text = text
+            return OllamaResponseMock(ollama_reply)
+
+    def _query_ollama_local(self, contents: list) -> str:
+        """Call local Ollama when Gemini API quota is fully exhausted."""
+        prompt_str = "สวัสดีครับ"
+        for item in contents:
+            if isinstance(item, str):
+                prompt_str = item
+                break
+
+        try:
+            url = "http://localhost:11434/api/generate"
+            payload = json.dumps({
+                "model": "qwen2.5:0.5b",
+                "prompt": f"คุณคือ AI Godji ผู้ช่วยคอมพิวเตอร์ จงตอบคำถามนี้เป็นภาษาไทยอย่างสุภาพ: {prompt_str}",
+                "stream": False
+            }).encode('utf-8')
+            
+            req = urllib.request.Request(url, data=payload, headers={'Content-Type': 'application/json'})
+            with urllib.request.urlopen(req, timeout=5) as response:
+                if response.status == 200:
+                    res_data = json.loads(response.read().decode('utf-8'))
+                    return res_data.get("response", "สวัสดีครับ ผม AI Godji ครับ (ตอบผ่าน Local Ollama)")
+        except Exception as e:
+            print(f"Ollama local fallback failed: {e}")
+
+        return "⚠️ โควต้าฟรีของ Gemini API เต็มประจำวันแล้วครับ (สามารถสร้าง API Key ใหม่ใน Google AI Studio หรือผูกบัตรแบบ Pay-as-you-go เพื่อเปิดความเร็วเต็มสปีดได้ครับ)"
 
     async def process_cli_command(self, tool_name: str, tool_args: dict) -> dict:
         """Handle CLI tool calls executed by AI Godji."""
