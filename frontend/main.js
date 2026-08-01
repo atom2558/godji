@@ -1,8 +1,35 @@
 const { app, BrowserWindow, ipcMain, desktopCapturer, screen } = require('electron');
 const path = require('path');
+const { spawn, exec } = require('child_process');
 
 let dashboardWindow = null;
 let overlayWindow = null;
+let pyBackendProcess = null;
+
+function autoStartPythonBackend() {
+  // Clear any existing process on port 8000 then start Python Backend
+  const killCmd = process.platform === 'win32'
+    ? 'for /f "tokens=5" %a in (\'netstat -aon ^| findstr :8000\') do taskkill /f /pid %a 2>nul'
+    : 'fuser -k 8000/tcp';
+
+  exec(killCmd, () => {
+    const backendDir = path.join(__dirname, '..', 'backend');
+    console.log('[Electron] Launching Python Backend from:', backendDir);
+    
+    pyBackendProcess = spawn('python', ['-m', 'uvicorn', 'app.main:app', '--host', '0.0.0.0', '--port', '8000'], {
+      cwd: backendDir,
+      shell: true
+    });
+
+    pyBackendProcess.stdout.on('data', (data) => {
+      console.log(`[Python Backend] ${data}`);
+    });
+
+    pyBackendProcess.stderr.on('data', (data) => {
+      console.error(`[Python Backend Err] ${data}`);
+    });
+  });
+}
 
 function createWindows() {
   const primaryDisplay = screen.getPrimaryDisplay();
@@ -48,11 +75,13 @@ function createWindows() {
 
   dashboardWindow.on('closed', () => {
     if (overlayWindow) overlayWindow.close();
+    if (pyBackendProcess) pyBackendProcess.kill();
     app.quit();
   });
 }
 
 app.whenReady().then(() => {
+  autoStartPythonBackend();
   createWindows();
 
   app.on('activate', () => {
@@ -61,37 +90,33 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  if (pyBackendProcess) pyBackendProcess.kill();
   if (process.platform !== 'darwin') app.quit();
 });
 
-// IPC Handler: Desktop Screen Frame Capture
+// IPC Handler: Capture High-Quality Desktop Screen Frame for Computer Vision
 ipcMain.handle('capture-screen', async () => {
   try {
     const sources = await desktopCapturer.getSources({
       types: ['screen'],
       thumbnailSize: { width: 1280, height: 720 }
     });
+
     if (sources.length > 0) {
-      return sources[0].thumbnail.toJPEG(80).toString('base64');
+      const primarySource = sources[0];
+      const imagePng = primarySource.thumbnail.toPNG();
+      return imagePng.toString('base64');
     }
     return null;
   } catch (error) {
-    console.error('Error capturing desktop screen:', error);
+    console.error('[Electron] Error capturing screen:', error);
     return null;
   }
 });
 
-// IPC Handler: Relay HUD draw commands to Overlay Window
+// IPC Relay: Receive HUD Bounding Box Data from Dashboard and forward to Transparent Overlay Window
 ipcMain.on('draw-hud', (event, hudData) => {
   if (overlayWindow && !overlayWindow.isDestroyed()) {
-    overlayWindow.webContents.send('render-hud-data', hudData);
-  }
-});
-
-// IPC Handler: Toggle Overlay Visibility
-ipcMain.on('toggle-overlay', (event, visible) => {
-  if (overlayWindow && !overlayWindow.isDestroyed()) {
-    if (visible) overlayWindow.show();
-    else overlayWindow.hide();
+    overlayWindow.webContents.send('render-hud-boxes', hudData);
   }
 });
