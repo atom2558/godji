@@ -113,11 +113,17 @@ async def websocket_endpoint(websocket: WebSocket):
                     cli_cmd = voice_res.get("cli_command")
                     cli_output = voice_res.get("cli_output")
                 else:
-                    print("[STT Voice Text] Empty or silent audio")
+                    print("[STT Voice Text] Silent audio, checking screen vision context...")
                     transcribed_text = None
-                    reply_msg = "ไม่ได้ยินเสียงพูด หรือเสียงเบาเกินไป โปรดกดไมค์แล้วพูดใหม่อีกครั้งครับ"
-                    cli_cmd = None
-                    cli_output = None
+                    if image_bytes:
+                        voice_res = await gemini_client.chat_with_godji("สวัสดีครับก็อดจิ ช่วยมองหน้าจอผมแล้วแนะนำขั้นตอนถัดไปทีครับ", image_bytes)
+                        reply_msg = voice_res.get("reply")
+                        cli_cmd = voice_res.get("cli_command")
+                        cli_output = voice_res.get("cli_output")
+                    else:
+                        reply_msg = "ไม่ได้ยินเสียงพูด หรือเสียงเบาเกินไป โปรดลองพูดใกล้ไมค์อีกครั้งครับ"
+                        cli_cmd = None
+                        cli_output = None
 
                 await websocket.send_json({
                     "type": "chat_reply",

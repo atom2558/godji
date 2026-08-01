@@ -47,11 +47,12 @@ class STTTranscriber:
                 tmp_file.write(audio_bytes)
                 tmp_wav_path = tmp_file.name
 
-            # Method 1: Google SpeechRecognition th-TH (Primary - World Class for Thai Numbers & Speech)
+            # Method 1: Google SpeechRecognition th-TH (Auto-adjust ambient noise for high sensitivity)
             try:
                 recognizer = sr.Recognizer()
-                recognizer.energy_threshold = 300
                 with sr.AudioFile(tmp_wav_path) as source:
+                    # Dynamically adjust energy threshold to match ambient room noise
+                    recognizer.adjust_for_ambient_noise(source, duration=0.1)
                     audio_data = recognizer.record(source)
 
                 text = recognizer.recognize_google(audio_data, language="th-TH")
@@ -68,7 +69,7 @@ class STTTranscriber:
                     segments, _ = whisper_model.transcribe(
                         tmp_wav_path,
                         language="th",
-                        initial_prompt="หนึ่ง บวก หนึ่ง บวก สอง เท่ากับ เท่าไหร่ ก็อดจิ Godji"
+                        initial_prompt="ก็อดจิ Godji สวัสดีครับ"
                     )
                     text = "".join([segment.text for segment in segments]).strip()
                     text = cls._correct_godji_phonetics(text)

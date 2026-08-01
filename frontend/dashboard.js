@@ -230,9 +230,21 @@ async function startRecording() {
   }
 
   try {
-    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    micStream = await navigator.mediaDevices.getUserMedia({ 
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
+      } 
+    });
+    
     audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
     const source = audioContext.createMediaStreamSource(micStream);
+
+    // Add 3x Mic Gain Booster for soft/quiet voices
+    const gainNode = audioContext.createGain();
+    gainNode.gain.value = 3.0; // Boost mic input volume by 300%
+    source.connect(gainNode);
 
     pcmBuffers = [];
     scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
@@ -242,12 +254,12 @@ async function startRecording() {
       pcmBuffers.push(new Float32Array(inputData));
     };
 
-    source.connect(scriptProcessor);
+    gainNode.connect(scriptProcessor);
     scriptProcessor.connect(audioContext.destination);
 
     const analyser = audioContext.createAnalyser();
     analyser.fftSize = 512;
-    source.connect(analyser);
+    gainNode.connect(analyser);
 
     const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
@@ -255,11 +267,11 @@ async function startRecording() {
     isRecording = true;
     micBtn.style.background = '#ef4444';
     micBtn.innerText = '🎙️ (กำลังฟัง...)';
-    log('🎙️ เริ่มฟังเสียง... เมื่อพูดจบและเงียบเสียง ระบบจะส่งให้อัตโนมัติครับ', 'info');
+    log('🎙️ เริ่มฟังเสียง (ขยายความดังไมค์ 300%)... เมื่อพูดจบระบบจะส่งให้อัตโนมัติครับ', 'info');
 
     let hasSpoken = false;
-    const SILENCE_THRESHOLD = 12;
-    const SILENCE_TIMEOUT = 1200;
+    const SILENCE_THRESHOLD = 5; // Ultra sensitive for quiet/soft voice
+    const SILENCE_TIMEOUT = 1400; // 1.4s silence after speech to send
 
     function checkSilence() {
       if (!isRecording) return;
