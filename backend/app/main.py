@@ -9,6 +9,7 @@ from app.gemini_client import GeminiAssistantClient
 from app.vision_parser import VisionParser
 from app.cli_tools import CLISystemAgent
 from app.ollama_gatekeeper import OllamaGatekeeper
+from app.stt_transcriber import STTTranscriber
 
 app = FastAPI(
     title="AI Godji Backend API",
@@ -110,12 +111,21 @@ async def websocket_live_stream(websocket: WebSocket):
                 audio_bytes = base64.b64decode(audio_b64)
                 image_bytes = base64.b64decode(image_b64) if image_b64 else None
                 
-                voice_res = await gemini_client.process_voice_chat(audio_bytes, mime_type, image_bytes)
+                # Convert audio to Thai text (Speech-To-Text STT)
+                transcribed_text = await asyncio.to_thread(STTTranscriber.transcribe_audio_bytes, audio_bytes, mime_type)
+
+                if transcribed_text:
+                    print(f"🎙️ Transcribed Thai text: '{transcribed_text}'")
+                    voice_res = await gemini_client.chat_with_godji(transcribed_text, image_bytes)
+                else:
+                    voice_res = await gemini_client.process_voice_chat(audio_bytes, mime_type, image_bytes)
+
                 await websocket.send_json({
                     "type": "chat_reply",
                     "reply": voice_res.get("reply"),
                     "cli_command": voice_res.get("cli_command"),
-                    "cli_output": voice_res.get("cli_output")
+                    "cli_output": voice_res.get("cli_output"),
+                    "transcribed_text": transcribed_text
                 })
 
 

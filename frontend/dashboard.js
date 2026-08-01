@@ -57,6 +57,9 @@ connectBtn.addEventListener('click', () => {
         } else if (msg.type === 'cli_result') {
           log(`🚀 CLI [${msg.tool_name}] Result: ${JSON.stringify(msg.result)}`, 'success');
         } else if (msg.type === 'chat_reply') {
+          if (msg.transcribed_text) {
+            log(`🎙️ เสียงถูกแปลงเป็นข้อความ: "${msg.transcribed_text}"`, 'info');
+          }
           if (msg.reply) {
             log(`🐉 Godji: ${msg.reply}`, 'success');
             speakText(msg.reply);
