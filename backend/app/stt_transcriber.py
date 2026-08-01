@@ -2,11 +2,9 @@ import io
 import tempfile
 import os
 import re
-import wave
-import numpy as np
 import speech_recognition as sr
 
-# Load local Faster-Whisper 'small' model (Vastly superior Thai speech recognition accuracy)
+# Load local Faster-Whisper 'small' model
 whisper_model = None
 try:
     from faster_whisper import WhisperModel
@@ -16,7 +14,7 @@ except Exception as e:
     print(f"[STT Error] Faster-Whisper init: {e}")
 
 class STTTranscriber:
-    """High-accuracy Thai Speech-to-Text with Peak Audio Normalization & Phonetic Corrector."""
+    """High-accuracy Thai Speech-to-Text using Google SpeechRecognition (th-TH) + Faster-Whisper small."""
 
     CORRECTION_MAP = {
         r"กิติ": "ก็อดจิ",
@@ -40,52 +38,20 @@ class STTTranscriber:
         return cleaned
 
     @classmethod
-    def _normalize_wav_audio(cls, wav_bytes: bytes) -> bytes:
-        """Normalize audio peak volume to 95% maximum amplitude for maximum STT clarity."""
-        try:
-            with io.BytesIO(wav_bytes) as in_io:
-                with wave.open(in_io, 'rb') as wf:
-                    params = wf.getparams()
-                    frames = wf.readframes(params.nframes)
-
-            # Convert 16-bit PCM bytes to numpy array
-            audio_data = np.frombuffer(frames, dtype=np.int16).astype(np.float32)
-            max_val = np.max(np.abs(audio_data))
-            
-            if max_val > 10:
-                # Target peak amplitude: 28000 (approx 85-90% of int16 max 32767)
-                scale_factor = 28000.0 / max_val
-                audio_data = np.clip(audio_data * scale_factor, -32767, 32767).astype(np.int16)
-
-            out_io = io.BytesIO()
-            with wave.open(out_io, 'wb') as wf:
-                wf.setparams(params)
-                wf.writeframes(audio_data.tobytes())
-            
-            return out_io.getvalue()
-        except Exception as e:
-            print(f"[STT Audio Normalize Warning]: {e}")
-            return wav_bytes
-
-    @classmethod
     def transcribe_audio_bytes(cls, audio_bytes: bytes, mime_type: str = "audio/wav") -> str:
         if not audio_bytes or len(audio_bytes) < 100:
             return ""
 
-        # Normalize audio volume peak for ultra clarity
-        normalized_bytes = cls._normalize_wav_audio(audio_bytes)
-
         tmp_wav_path = None
         try:
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:
-                tmp_file.write(normalized_bytes)
+                tmp_file.write(audio_bytes)
                 tmp_wav_path = tmp_file.name
 
             # Method 1: Google SpeechRecognition th-TH (Primary)
             try:
                 recognizer = sr.Recognizer()
                 with sr.AudioFile(tmp_wav_path) as source:
-                    recognizer.adjust_for_ambient_noise(source, duration=0.1)
                     audio_data = recognizer.record(source)
 
                 text = recognizer.recognize_google(audio_data, language="th-TH")
