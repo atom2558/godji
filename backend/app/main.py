@@ -37,6 +37,18 @@ PORT = int(os.getenv("PORT", 8000))
 prev_frame_bytes = None
 is_streaming_active = False
 
+WAKE_KEYWORDS = [
+    "ก็อดจิ", "กอดจิ", "ก็อตจิ", "ก๊อดจิ", "godji", "เอไอ", 
+    "ช่วย", "ดู", "อ่าน", "เท่าไหร่", "ทำอะไร", "สร้าง", "เปิด", 
+    "บทความ", "หน้าจอ", "ภาพ", "คำนวณ", "สวัสดี"
+]
+
+def is_wake_word_or_command(text: str) -> bool:
+    if not text or not text.strip():
+        return False
+    lower = text.lower()
+    return any(kw in lower for kw in WAKE_KEYWORDS)
+
 @app.get("/")
 def read_root():
     return {
@@ -87,7 +99,7 @@ async def websocket_endpoint(websocket: WebSocket):
             elif packet_type == "chat":
                 user_msg = packet.get("message", "")
                 image_b64 = packet.get("image", None)
-                image_bytes = base64.b64decode(image_b64) if image_b64 and is_streaming_active else None
+                image_bytes = base64.b64decode(image_b64) if image_b64 else None
                 
                 chat_res = await gemini_client.chat_with_godji(user_msg, image_bytes)
                 await websocket.send_json({
@@ -98,32 +110,34 @@ async def websocket_endpoint(websocket: WebSocket):
                 })
             elif packet_type == "voice_chat":
                 audio_b64 = packet.get("audio", "")
-                mime_type = packet.get("mime_type", "audio/webm")
+                mime_type = packet.get("mime_type", "audio/wav")
                 image_b64 = packet.get("image", None)
                 
                 audio_bytes = base64.b64decode(audio_b64)
-                image_bytes = base64.b64decode(image_b64) if image_b64 and is_streaming_active else None
+                # Decode screen snapshot whenever provided by client for Moondream Vision
+                image_bytes = base64.b64decode(image_b64) if image_b64 else None
                 
                 transcribed_text = await asyncio.to_thread(STTTranscriber.transcribe_audio_bytes, audio_bytes, mime_type)
 
                 if transcribed_text and transcribed_text.strip():
                     print(f"[STT Voice Text] '{transcribed_text}'")
-                    voice_res = await gemini_client.chat_with_godji(transcribed_text, image_bytes)
-                    reply_msg = voice_res.get("reply")
-                    cli_cmd = voice_res.get("cli_command")
-                    cli_output = voice_res.get("cli_output")
-                else:
-                    print("[STT Voice Text] Silent audio, checking screen vision context...")
-                    transcribed_text = None
-                    if image_bytes:
-                        voice_res = await gemini_client.chat_with_godji("สวัสดีครับก็อดจิ ช่วยมองหน้าจอผมแล้วแนะนำขั้นตอนถัดไปทีครับ", image_bytes)
+                    # Wake Word Filter: Only answer if prompt contains wake word or command
+                    if is_wake_word_or_command(transcribed_text):
+                        voice_res = await gemini_client.chat_with_godji(transcribed_text, image_bytes)
                         reply_msg = voice_res.get("reply")
                         cli_cmd = voice_res.get("cli_command")
                         cli_output = voice_res.get("cli_output")
                     else:
-                        reply_msg = "ไม่ได้ยินเสียงพูด หรือเสียงเบาเกินไป โปรดลองพูดใกล้ไมค์อีกครั้งครับ"
+                        print(f"[STT Voice Filter] Ignored background noise without wake word: '{transcribed_text}'")
+                        reply_msg = None
                         cli_cmd = None
                         cli_output = None
+                else:
+                    print("[STT Voice Text] Empty or silent audio - ignored")
+                    transcribed_text = None
+                    reply_msg = None
+                    cli_cmd = None
+                    cli_output = None
 
                 await websocket.send_json({
                     "type": "chat_reply",
