@@ -336,15 +336,18 @@ function stopRecording() {
   reader.onloadend = async () => {
     const base64Audio = reader.result.split(',')[1];
     
-    // 1-Shot Instant Screenshot Capture: Always capture screen snapshot on voice query so Moondream Vision can see screen
+    // ONLY capture screen screenshot if Real-time Vision Stream is ACTIVE (isStreaming === true)
     let base64Frame = null;
-    try {
-      base64Frame = await window.godjiAPI.captureScreen();
-    } catch (err) {
-      console.warn("Screen capture failed:", err);
+    if (isStreaming) {
+      log('📸 ถ่ายภาพหน้าจอส่งให้ AI Godji วิเคราะห์...', 'info');
+      try {
+        base64Frame = await window.godjiAPI.captureScreen();
+      } catch (err) {
+        console.warn("Screen capture failed:", err);
+      }
     }
     
-    log('🎙️ ส่งไฟล์เสียง WAV และภาพหน้าจอ 1 ช็อตไปให้ AI Godji วิเคราะห์...', 'info');
+    log('🎙️ ส่งไฟล์เสียง WAV ไปให้ AI Godji ถอดความภาษาไทย...', 'info');
     ws.send(JSON.stringify({
       type: 'voice_chat',
       audio: base64Audio,
