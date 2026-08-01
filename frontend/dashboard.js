@@ -495,18 +495,31 @@ if (chatInput) {
   });
 }
 
-// Auto-Connect and Auto-Start Settings on Launch (Immediate & Reconnect)
+// Auto-Connect and Auto-Start Settings on Launch (Persistent Retry Loop)
 function autoInit() {
-  setTimeout(() => {
-    // 1. Force 127.0.0.1 IPv4 address to prevent Windows IPv6 ::1 localhost resolving bug
+  const tryConnect = () => {
+    if (ws && ws.readyState === WebSocket.OPEN) return;
+    
     if (wsUrlInput && !wsUrlInput.value.includes('127.0.0.1') && !wsUrlInput.value.includes('render.com')) {
       wsUrlInput.value = 'ws://127.0.0.1:8000/ws/live';
     }
-    // 2. Auto-connect WebSocket to local server
-    if (connectBtn && (!ws || ws.readyState !== WebSocket.OPEN)) {
+    
+    if (connectBtn) {
       connectBtn.click();
     }
-  }, 200);
+  };
+
+  // Immediate attempt
+  setTimeout(tryConnect, 400);
+
+  // Persistent retry loop every 1.5s until Python backend finishes startup and connects!
+  const initInterval = setInterval(() => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      clearInterval(initInterval);
+    } else {
+      tryConnect();
+    }
+  }, 1500);
 }
 
 if (document.readyState === 'loading') {
