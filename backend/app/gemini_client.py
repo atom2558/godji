@@ -41,7 +41,7 @@ class GeminiAssistantClient:
         else:
             genai.configure(api_key=self.api_key)
             self.model = genai.GenerativeModel(
-                model_name="gemini-1.5-pro",
+                model_name="gemini-2.5-flash",
                 system_instruction=self.system_prompt
             )
 
@@ -95,3 +95,72 @@ class GeminiAssistantClient:
             return CLISystemAgent.list_directory(**tool_args)
         else:
             return {"status": "error", "message": f"Unknown tool '{tool_name}'"}
+
+    async def chat_with_godji(self, user_message: str, image_bytes: bytes = None) -> dict:
+        """Process direct user chat/voice message, execute CLI action if needed, and return response text."""
+        if not self.model:
+            return {
+                "reply": "⚠️ กรุณาตั้งค่า GEMINI_API_KEY ก่อนเริ่มสนทนาครับ!",
+                "cli_output": None
+            }
+
+        try:
+            prompt_content = []
+            sys_msg = (
+                f"ผู้ใช้ส่งข้อความถึงคุณว่า: '{user_message}'\n"
+                "หากผู้ใช้สั่งให้ควบคุมระบบ (เช่น สร้างโฟลเดอร์, สร้างไฟล์, ลบไฟล์, หรือรันคำสั่ง Windows/Linux) "
+                "ให้ตอบกลับด้วยรูปแบบ JSON ดังนี้เท่านั้น:\n"
+                "```json\n"
+                "{\n"
+                '  "reply": "คำตอบภาษาไทยที่จะพูดตอบผู้ใช้อย่างสุภาพน่ารัก",\n'
+                '  "cli_command": "คำสั่ง terminal ที่จะสั่งรัน (ถ้าไม่มีสั่งงานให้เป็น null)"\n'
+                "}\n"
+                "```\n"
+                "หากเป็นแค่การคุยทั่วไปหรือถามคำถาม ให้ใส่ cli_command เป็น null"
+            )
+            prompt_content.append(sys_msg)
+
+            if image_bytes:
+                image = Image.open(io.BytesIO(image_bytes))
+                prompt_content.append(image)
+
+            response = self.model.generate_content(prompt_content)
+            raw_text = response.text or ""
+
+            reply_text = raw_text
+            cli_cmd = None
+
+            if "```json" in raw_text:
+                json_str = raw_text.split("```json")[1].split("```")[0].strip()
+                try:
+                    parsed = json.loads(json_str)
+                    reply_text = parsed.get("reply", raw_text)
+                    cli_cmd = parsed.get("cli_command", None)
+                except Exception:
+                    pass
+            elif raw_text.strip().startswith("{") and raw_text.strip().endswith("}"):
+                try:
+                    parsed = json.loads(raw_text.strip())
+                    reply_text = parsed.get("reply", raw_text)
+                    cli_cmd = parsed.get("cli_command", None)
+                except Exception:
+                    pass
+
+            cli_output = None
+            if cli_cmd:
+                print(f"🤖 AI Godji executing command from chat: {cli_cmd}")
+                cli_output = CLISystemAgent.execute_command(cli_cmd)
+
+            return {
+                "reply": reply_text,
+                "cli_command": cli_cmd,
+                "cli_output": cli_output
+            }
+
+        except Exception as e:
+            print(f"Error in chat_with_godji: {e}")
+            return {
+                "reply": f"⚠️ เกิดข้อผิดพลาดในการสนทนา: {str(e)}",
+                "cli_output": None
+            }
+

@@ -89,6 +89,19 @@ async def websocket_live_stream(websocket: WebSocket):
                     "tool_name": tool_name,
                     "result": result
                 })
+            elif packet_type == "chat":
+                user_msg = packet.get("message", "")
+                image_b64 = packet.get("image", None)
+                image_bytes = base64.b64decode(image_b64) if image_b64 else None
+                
+                chat_res = await gemini_client.chat_with_godji(user_msg, image_bytes)
+                await websocket.send_json({
+                    "type": "chat_reply",
+                    "reply": chat_res.get("reply"),
+                    "cli_command": chat_res.get("cli_command"),
+                    "cli_output": chat_res.get("cli_output")
+                })
+
 
     except WebSocketDisconnect:
         print("🔌 Client disconnected from /ws/live endpoint")

@@ -210,10 +210,23 @@
       </div>
 
       <div class="control-card">
-        <h3>CLI System Controller</h3>
-        <input type="text" id="cliCommandInput" class="input-field" placeholder="พิมพ์คำสั่ง CLI หรือสั่งงาน..." style="margin-bottom: 10px;">
-        <button id="runCliBtn" class="btn btn-primary" style="background: #8b5cf6;">🚀 Run CLI Command</button>
+        <h3>🤖 AI Godji Chat & Voice</h3>
+        <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+          <input type="text" id="chatInput" class="input-field" placeholder="คุยกับ Godji หรือสั่งงานภาษาไทย..." style="flex: 1;">
+          <button id="micBtn" class="btn btn-primary" style="width: auto; padding: 0 14px; background: #ec4899;" title="กดเพื่อพูดด้วยเสียง">🎙️</button>
+        </div>
+        <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+          <button id="sendChatBtn" class="btn btn-primary" style="background: #8b5cf6; flex: 1;">💬 ส่งข้อความ / สั่งงาน</button>
+          <button id="ttsToggleBtn" class="btn btn-primary" style="width: auto; padding: 0 14px; background: #10b981;" title="เปิด/ปิด เสียงตอบกลับ">🔊 เสียง</button>
+        </div>
       </div>
+
+      <div class="control-card">
+        <h3>Direct CLI Controller</h3>
+        <input type="text" id="cliCommandInput" class="input-field" placeholder="คำสั่ง Windows เช่น mkdir..." style="margin-bottom: 10px;">
+        <button id="runCliBtn" class="btn btn-primary" style="background: #64748b;">🚀 Exec Command</button>
+      </div>
+
     </section>
 
     <section class="content-area">

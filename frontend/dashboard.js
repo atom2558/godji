@@ -58,6 +58,15 @@ connectBtn.addEventListener('click', () => {
           }
         } else if (msg.type === 'cli_result') {
           log(`🚀 CLI [${msg.tool_name}] Result: ${JSON.stringify(msg.result)}`, 'success');
+        } else if (msg.type === 'chat_reply') {
+          log(`🐉 Godji: ${msg.reply}`, 'success');
+          speakText(msg.reply);
+          if (msg.cli_command) {
+            log(`⚡ Godji สั่งรันคำสั่ง: ${msg.cli_command}`, 'warning');
+          }
+          if (msg.cli_output) {
+            log(`💻 CLI Output: ${JSON.stringify(msg.cli_output)}`, 'info');
+          }
         } else if (msg.type === 'skip') {
           // Heartbeat skipped
         }
@@ -153,3 +162,117 @@ runCliBtn.addEventListener('click', () => {
   }));
   cliCommandInput.value = '';
 });
+
+// Chat & Voice Controller
+const chatInput = document.getElementById('chatInput');
+const sendChatBtn = document.getElementById('sendChatBtn');
+const micBtn = document.getElementById('micBtn');
+const ttsToggleBtn = document.getElementById('ttsToggleBtn');
+
+let isTTSEnabled = true;
+let isListening = false;
+let recognition = null;
+
+if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  recognition = new SpeechRecognition();
+  recognition.lang = 'th-TH';
+  recognition.continuous = false;
+  recognition.interimResults = false;
+
+  recognition.onstart = () => {
+    isListening = true;
+    micBtn.style.background = '#ef4444';
+    micBtn.innerText = '🛑';
+    log('🎙️ กำลังฟังเสียงของคุณเป็นภาษาไทย...', 'info');
+  };
+
+  recognition.onresult = (event) => {
+    const transcript = event.results[0][0].transcript;
+    chatInput.value = transcript;
+    log(`🎙️ คุณพูดว่า: "${transcript}"`, 'info');
+    sendChatMessage(transcript);
+  };
+
+  recognition.onerror = (event) => {
+    log(`⚠️ ข้อผิดพลาดจากไมโครโฟน: ${event.error}`, 'warning');
+    stopListening();
+  };
+
+  recognition.onend = () => {
+    stopListening();
+  };
+}
+
+function stopListening() {
+  isListening = false;
+  micBtn.style.background = '#ec4899';
+  micBtn.innerText = '🎙️';
+}
+
+if (micBtn) {
+  micBtn.addEventListener('click', () => {
+    if (!recognition) {
+      log('⚠️ เบราว์เซอร์/ระบบไม่รองรับการจำเสียง (Speech Recognition)', 'warning');
+      return;
+    }
+    if (isListening) {
+      recognition.stop();
+    } else {
+      try {
+        recognition.start();
+      } catch (e) {
+        log(`⚠️ ไม่สามารถเปิดไมโครโฟนได้: ${e.message}`, 'warning');
+      }
+    }
+  });
+}
+
+if (ttsToggleBtn) {
+  ttsToggleBtn.addEventListener('click', () => {
+    isTTSEnabled = !isTTSEnabled;
+    ttsToggleBtn.style.background = isTTSEnabled ? '#10b981' : '#64748b';
+    log(`🔊 เสียงตอบกลับ: ${isTTSEnabled ? 'เปิด' : 'ปิด'}`, 'info');
+  });
+}
+
+function speakText(text) {
+  if (!isTTSEnabled || !('speechSynthesis' in window)) return;
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = 'th-TH';
+  utterance.rate = 1.0;
+  window.speechSynthesis.speak(utterance);
+}
+
+async function sendChatMessage(msgText) {
+  const text = msgText || (chatInput ? chatInput.value.trim() : '');
+  if (!text) return;
+
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    log('โปรดเชื่อมต่อ Backend WebSocket ก่อนส่งข้อความ!', 'warning');
+    return;
+  }
+
+  log(`💬 คุณ: ${text}`, 'info');
+
+  const base64Frame = await window.godjiAPI.captureScreen();
+
+  ws.send(JSON.stringify({
+    type: 'chat',
+    message: text,
+    image: base64Frame
+  }));
+
+  if (chatInput) chatInput.value = '';
+}
+
+if (sendChatBtn) {
+  sendChatBtn.addEventListener('click', () => sendChatMessage());
+}
+if (chatInput) {
+  chatInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') sendChatMessage();
+  });
+}
+
