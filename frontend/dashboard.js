@@ -338,10 +338,13 @@ function stopRecording() {
   };
 }
 
-let isContinuousVoice = false;
+let isContinuousVoice = true; // Active by default for continuous handsfree listening
 const continuousVoiceBtn = document.getElementById('continuousVoiceBtn');
 
 if (continuousVoiceBtn) {
+  continuousVoiceBtn.style.background = '#10b981';
+  continuousVoiceBtn.innerText = '🔄 โหมดคุยต่อเนื่อง (Handsfree ADA V2): เปิดอยู่';
+
   continuousVoiceBtn.addEventListener('click', async () => {
     isContinuousVoice = !isContinuousVoice;
     if (isContinuousVoice) {
@@ -371,11 +374,19 @@ function speakText(text) {
   // Clean raw JSON or markdown symbols if present
   let cleanText = text.replace(/```[\s\S]*?```/g, '').replace(/[\{\}\[\]\*\_\#]/g, '').trim() || text;
 
+  let hasResumed = false;
+  const autoResumeMic = async () => {
+    if (hasResumed) return;
+    hasResumed = true;
+    if (isContinuousVoice && !isRecording) {
+      log('🎙️ AI พูดจบแล้ว... เปิดไมค์ฟังเสียงต่อเนื่องอัตโนมัติ', 'info');
+      await startRecording();
+    }
+  };
+
   if (!isTTSEnabled || !('speechSynthesis' in window) || !cleanText) {
     if (isContinuousVoice) {
-      setTimeout(async () => {
-        if (isContinuousVoice && !isRecording) await startRecording();
-      }, 1000);
+      setTimeout(autoResumeMic, 800);
     }
     return;
   }
@@ -385,21 +396,14 @@ function speakText(text) {
   utterance.lang = 'th-TH';
   utterance.rate = 1.0;
 
-  const onSpeechDone = () => {
-    if (isContinuousVoice) {
-      setTimeout(async () => {
-        if (isContinuousVoice && !isRecording) {
-          log('🎙️ AI พูดจบแล้ว... เริ่มฟังเสียงต่อเนื่องอัตโนมัติ', 'info');
-          await startRecording();
-        }
-      }, 400);
-    }
-  };
-
-  utterance.onend = onSpeechDone;
-  utterance.onerror = onSpeechDone;
+  utterance.onend = autoResumeMic;
+  utterance.onerror = autoResumeMic;
 
   window.speechSynthesis.speak(utterance);
+
+  // Watchdog Timer Fallback: Guarantee mic re-opens even if Chrome SpeechSynthesis event drops
+  const estimatedTimeMs = Math.max(2000, cleanText.length * 160);
+  setTimeout(autoResumeMic, estimatedTimeMs + 500);
 }
 
 async function sendChatMessage(msgText) {
