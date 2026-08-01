@@ -335,9 +335,16 @@ function stopRecording() {
   reader.readAsDataURL(wavBlob);
   reader.onloadend = async () => {
     const base64Audio = reader.result.split(',')[1];
-    const base64Frame = isStreaming ? await window.godjiAPI.captureScreen() : null;
     
-    log('🎙️ ส่งไฟล์เสียง WAV ไปให้ AI Godji ถอดความภาษาไทย...', 'info');
+    // 1-Shot Instant Screenshot Capture: Always capture screen snapshot on voice query so Moondream Vision can see screen
+    let base64Frame = null;
+    try {
+      base64Frame = await window.godjiAPI.captureScreen();
+    } catch (err) {
+      console.warn("Screen capture failed:", err);
+    }
+    
+    log('🎙️ ส่งไฟล์เสียง WAV และภาพหน้าจอ 1 ช็อตไปให้ AI Godji วิเคราะห์...', 'info');
     ws.send(JSON.stringify({
       type: 'voice_chat',
       audio: base64Audio,
@@ -348,6 +355,18 @@ function stopRecording() {
     if (micStream) micStream.getTracks().forEach(t => t.stop());
     if (audioContext && audioContext.state !== 'closed') audioContext.close();
   };
+}
+
+const VISION_INTENT_KEYWORDS = [
+  "ดูหน้าจอ", "มองหน้าจอ", "ดูจอ", "มองจอ", "หน้าจอผม", "หน้าจอฉัน", 
+  "ช่วยดู", "ดูภาพ", "มองภาพ", "หน้าจอนี้", "เห็นอะไร", "อ่านหน้าจอ",
+  "look at screen", "see screen", "on my screen", "look at my screen"
+];
+
+function isVisionIntent(text) {
+  if (!text) return false;
+  const lower = text.toLowerCase();
+  return VISION_INTENT_KEYWORDS.some(kw => lower.includes(kw));
 }
 
 let isContinuousVoice = true; // Active by default for continuous handsfree listening
@@ -429,8 +448,14 @@ async function sendChatMessage(msgText) {
 
   log(`💬 คุณ: ${text}`, 'info');
 
-  // ONLY capture screen if Vision Stream is ACTIVE (isStreaming === true)
-  const base64Frame = isStreaming ? await window.godjiAPI.captureScreen() : null;
+  // Capture screen snapshot if screen sharing is active OR if user explicitly asks AI to look at screen!
+  let base64Frame = null;
+  if (isStreaming || isVisionIntent(text)) {
+    if (!isStreaming) {
+      log('📸 ถ่ายภาพหน้าจอ 1 ช็อตส่งให้ AI Godji วิเคราะห์ทันที...', 'info');
+    }
+    base64Frame = await window.godjiAPI.captureScreen();
+  }
 
   ws.send(JSON.stringify({
     type: 'chat',
