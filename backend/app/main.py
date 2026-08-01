@@ -92,20 +92,8 @@ async def websocket_live_stream(websocket: WebSocket):
                 })
             elif packet_type == "chat":
                 user_msg = packet.get("message", "")
-                
-                # Check with local Ollama Gatekeeper before calling Gemini (Token Saver)
-                should_call = await OllamaGatekeeper.should_forward_to_gemini(user_msg)
-                if not should_call:
-                    await websocket.send_json({
-                        "type": "chat_reply",
-                        "reply": None,
-                        "cli_command": None,
-                        "cli_output": None
-                    })
-                    continue
-
                 image_b64 = packet.get("image", None)
-                image_bytes = base64.b64decode(image_b64) if image_b64 else None
+                image_bytes = base64.b64decode(image_b64) if image_b64 and is_streaming_active else None
                 
                 chat_res = await gemini_client.chat_with_godji(user_msg, image_bytes)
                 await websocket.send_json({
