@@ -4,8 +4,7 @@ import json
 import asyncio
 from PIL import Image
 import io
-from google import genai
-from google.genai import types
+import google.generativeai as genai
 from app.config import GEMINI_API_KEY
 from app.cli_tools import CLISystemAgent, CLI_TOOLS_DECLARATIONS
 from app.vision_parser import VisionParser
@@ -15,12 +14,6 @@ class GeminiAssistantClient:
 
     def __init__(self, api_key: str = None):
         self.api_key = api_key or GEMINI_API_KEY
-        if not self.api_key:
-            print("⚠️ WARNING: GEMINI_API_KEY is not configured!")
-            self.client = None
-        else:
-            self.client = genai.Client(api_key=self.api_key)
-
         self.system_prompt = """คุณคือ "AI Godji" (เอไอ ก็อดจิ) ผู้ช่วยอัจฉริยะแบบภาพและเสียงแบบเรียลไทม์ที่น่ารัก ฉลาด รอบรู้ และขี้เล่น
 หน้าที่ของคุณ:
 1. วิเคราะห์ภาพหน้าจอคอมพิวเตอร์ของผู้ใช้อยู่ตลอดเวลา
@@ -42,19 +35,27 @@ class GeminiAssistantClient:
 3. สามารถใช้งาน CLI Tools ในการอ่านไฟล์, แก้ไขไฟล์ (edit_file), ลบไฟล์ (delete_file) หรือรันคำสั่ง Terminal บนคอมพิวเตอร์ของผู้ใช้ได้ตามสั่ง
 4. พูดจาด้วยน้ำเสียงเป็นมิตร สุภาพ มีหางเสียง "ครับ" แบบ AI Godji
 """
+        if not self.api_key:
+            print("⚠️ WARNING: GEMINI_API_KEY is not configured!")
+            self.model = None
+        else:
+            genai.configure(api_key=self.api_key)
+            self.model = genai.GenerativeModel(
+                model_name="gemini-1.5-flash",
+                system_instruction=self.system_prompt
+            )
 
     async def analyze_screen_frame(self, image_bytes: bytes, user_prompt: str = None) -> dict:
         """Process a screen frame and optional user prompt, returning HUD drawing data and assistant text."""
-        if not self.client:
+        if not self.model:
             return {
-                "subtitles": "⚠️ กรุณาตั้งค่า GEMINI_API_KEY ในไฟล์ .env ก่อนเริ่มใช้งานครับ!",
+                "subtitles": "⚠️ กรุณาตั้งค่า GEMINI_API_KEY ใน Render / .env ก่อนเริ่มใช้งานครับ!",
                 "bounding_boxes": [],
                 "lead_dots": [],
                 "arrows": []
             }
 
         try:
-            # Convert bytes to PIL Image
             image = Image.open(io.BytesIO(image_bytes))
 
             prompt_text = user_prompt or (
@@ -62,14 +63,8 @@ class GeminiAssistantClient:
                 "จุดยิงดัก (lead_dots), และทิศทาง (arrows) ในรูปแบบ JSON พร้อมข้อความ Subtitle คำอธิบาย"
             )
 
-            response = self.client.models.generate_content(
-                model="gemini-2.0-flash-exp",
-                contents=[prompt_text, image],
-                config=types.GenerateContentConfig(
-                    system_instruction=self.system_prompt,
-                    temperature=0.4,
-                )
-            )
+            # Generate content using Gemini 1.5 Flash Vision
+            response = self.model.generate_content([prompt_text, image])
 
             raw_text = response.text or ""
             parsed_hud = VisionParser.parse_gemini_hud_response(raw_text)
