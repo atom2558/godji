@@ -109,22 +109,29 @@ async def websocket_live_stream(websocket: WebSocket):
                 image_b64 = packet.get("image", None)
                 
                 audio_bytes = base64.b64decode(audio_b64)
-                image_bytes = base64.b64decode(image_b64) if image_b64 else None
+                image_bytes = base64.b64decode(image_b64) if image_b64 and is_streaming_active else None
                 
                 # Convert audio to Thai text (Speech-To-Text STT)
                 transcribed_text = await asyncio.to_thread(STTTranscriber.transcribe_audio_bytes, audio_bytes, mime_type)
 
-                if transcribed_text:
+                if transcribed_text and transcribed_text.strip():
                     print(f"🎙️ Transcribed Thai text: '{transcribed_text}'")
                     voice_res = await gemini_client.chat_with_godji(transcribed_text, image_bytes)
+                    reply_msg = voice_res.get("reply")
+                    cli_cmd = voice_res.get("cli_command")
+                    cli_output = voice_res.get("cli_output")
                 else:
-                    voice_res = await gemini_client.process_voice_chat(audio_bytes, mime_type, image_bytes)
+                    print("🎙️ STT returned empty (silent or quiet audio)")
+                    transcribed_text = None
+                    reply_msg = "⚠️ ไม่ได้ยินเสียงพูด หรือเสียงเบาเกินไป โปรดกดไมค์แล้วพูดใหม่อีกครั้งครับ"
+                    cli_cmd = None
+                    cli_output = None
 
                 await websocket.send_json({
                     "type": "chat_reply",
-                    "reply": voice_res.get("reply"),
-                    "cli_command": voice_res.get("cli_command"),
-                    "cli_output": voice_res.get("cli_output"),
+                    "reply": reply_msg,
+                    "cli_command": cli_cmd,
+                    "cli_output": cli_output,
                     "transcribed_text": transcribed_text
                 })
 
