@@ -41,7 +41,7 @@ class GeminiAssistantClient:
         else:
             genai.configure(api_key=self.api_key)
             self.model = genai.GenerativeModel(
-                model_name="gemini-1.5-flash-latest",
+                model_name="gemini-1.5-pro",
                 system_instruction=self.system_prompt
             )
 
